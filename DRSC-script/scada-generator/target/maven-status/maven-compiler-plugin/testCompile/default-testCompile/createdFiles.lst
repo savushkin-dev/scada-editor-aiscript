@@ -1,0 +1,3 @@
+ru\drm\scada\generator\XmlProjectGeneratorTest.class
+ru\drm\scada\usecase\ProjectModelAssemblerTest.class
+ru\drm\scada\adapter\lua\SimpleLuaParserTest.class

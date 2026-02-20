@@ -1,0 +1,1020 @@
+--Проект 'O1-Моцарелла'
+package.path = package.path .. ';./dairy-sys/?.lua'
+prg = require("prg")                        --Технологические объекты.
+
+alpma = require("alpmagate")                --Обмен со шлюзом Alpma.
+pumps = require("error_pumps")
+safety = require("safety")
+require( "sharedmodbus" )                   --Межконтроллерный обмен
+bertsch = require( "bertschmozgate1" )
+------------------------------------------------------------------------------
+wash_tank = {}
+
+function wash_tank:user_init()
+    if self.ALPMA_ID then
+        self.DI_empty_object = DI( "ALPMAGW5DI"..self.ALPMA_ID.."03" )
+        self.DI_safety = DI( "ALPMAGW5DI"..self.ALPMA_ID.."04" )
+    end
+    if self.ALPMA_ID == 4820 then
+        self.work_node = prg.tank_p4790
+    end
+    if self.ALPMA_ID == 4790 or self.ALPMA_ID == 4840 or self.ALPMA_ID == 4850 or
+        self.ALPMA_ID == 4870 or self.ALPMA_ID == 4875 then
+        self.water_request_DI = DI( "ALPMAGW5DI"..self.ALPMA_ID.."11" )
+        self.water_request_DO = DO( "ALPMAGW5DO"..self.ALPMA_ID.."11" )
+    end
+end
+
+function wash_tank:user_evaluate()
+    local oper_mngr = self:get_modes_manager()
+
+    local m = self.operations.WASHING_CIP
+    if self:get_mode( m ) == operation.RUN then
+        local oper = oper_mngr[ m ]
+        local oper_state = self:get_operation_state( m )
+
+        if oper_state == operation.PAUSE then
+            if self.was_DI_safety and self.DI_safety:is_active() then
+                self.was_DI_safety = false
+                self:set_mode( m, operation.RUN )
+            end
+
+        elseif oper_state == operation.RUN then
+            local step = oper:active_step()
+            if self.DI_empty_object and
+                step == self.steps.WASHING_CIP.RUN.MEDIUM_CHANGE and
+                self.DI_empty_object:is_active() then
+
+                oper:to_step( self.steps.WASHING_CIP.RUN.MEDIUM_CHANGE + 1 )
+            end
+
+            if not self.DI_safety:is_active() then
+                self.was_DI_safety = true
+                self:set_mode( m, operation.PAUSE )
+                self:set_err_msg( "устройство безопасности ALPMA не готово", m,
+                    0, tech_object.ERR_TO_FAIL_STATE )
+            end
+            if step == self.steps.WASHING_CIP.RUN.MEDIUM_CHANGE then
+                if not self.WASHING_CIP.MEDIUM_CHANGE_REQUEST:is_active() then
+                    oper:to_step( 1 )
+                end
+            end
+        end
+    end
+
+    m = self.operations.WORK
+    if self.user_evaluate_work and self:get_mode( m ) == 1 then
+        self:user_evaluate_work( m )
+    end
+
+    -- Для формирования сигнала запроса воды первый объект (4790) сбрасывает
+    -- флаг. Далее, если есть запрос воды, устанавливаем флаг. Потом, в
+    -- последний объект (4875) по данному флагу устанавливает либо сбрасывает
+    -- запрос воды.
+    if self.ALPMA_ID == 4790 then
+        WLINE5DO12_flag.is_on = false
+    end
+    if self.water_request_DI and self:get_mode( m ) == 1 then
+        if self.water_request_DI:is_active() then
+            WLINE5DO12_flag.is_on = true
+            if WLINE5DI12:is_active() then
+                self.water_request_DO:on()
+            else
+                self.water_request_DO:off()
+            end
+        else
+            self.water_request_DO:off()
+        end
+    end
+    if self.ALPMA_ID == 4875 then
+        if WLINE5DO12_flag.is_on then
+            WLINE5DO12:on()
+            WLINE5DO12_flag.prev_state = true
+        elseif WLINE5DO12_flag.prev_state then
+            WLINE5DO12:off()
+            WLINE5DO12_flag.prev_state = false
+        end
+    end
+end
+
+function wash_tank:user_final_operation( m )
+    if m == self.operations.WORK and self.water_request_DI then
+        self.water_request_DO:off()
+        WLINE5DO12:off()
+        WLINE5DO12_flag.prev_state = false
+    end
+end
+------------------------------------------------------------------------------
+function prg.line_in_o7:user_check_on_mode( m, show_error )
+    local par = self.par_float
+    local PAR = self.PAR_FLOAT
+
+    if m == self.operations.FILL then
+        for _, checking_node in pairs( self.checking_node ) do
+            if checking_node:get_mode( checking_node.operations.FILL ) == operation.RUN and
+                par[ PAR.ACTIVITY_TANK ] == 1 then
+                if checking_node.par_float[ checking_node.PAR_FLOAT.ACTIVITY_TANK ] == 1 then
+                    self:set_err_msg( "бачок лимонной кислоты уже используется", m, 0, tech_object.ERR_CANT_ON )
+                    return 1
+                end
+            end
+        end
+
+        if par[ PAR.ACTIVITY_TANK ] == 1 then
+            self.FILL.NEED_FLOW_CONTROL = true
+            return self.coop_node:check_operation_on(
+                self.coop_node.operations.OUT, show_error )
+        else
+            self.FILL.NEED_FLOW_CONTROL = false
+        end
+    end
+
+    return 0
+end
+
+function prg.line_in_o7:user_init()
+    self.coop_node = prg.la_tank1
+    self.destination_ready = O7DO11
+    --Описание, необходимое для операции "Наполнение в Ультрафильтрацию"
+    self.operations.FILL_UF = 3
+    self.checking_node = { prg.line_in_o8 }
+end
+
+function prg.line_in_o7:user_init_operation( m )
+    local par = self.par_float
+    local PAR = self.PAR_FLOAT
+    if m == self.operations.FILL then
+        if par[ PAR.ACTIVITY_TANK ] == 1 then
+            self.coop_node:set_mode( self.coop_node.operations.OUT, operation.RUN )
+            local m_mngr = self.coop_node:get_modes_manager()
+            local oper = m_mngr[ self.coop_node.operations.OUT ]
+            oper:to_step( self.coop_node.steps.OUT.RUN.WORK_O7 )
+        end
+    end
+end
+
+function prg.line_in_o7:user_evaluate()
+    local m = self.operations.FILL
+    if self:get_mode( m ) == 1 then
+        if self.FILL.NEED_FLOW_CONTROL then
+            self:sync_node_state( self.coop_node, self.coop_node.operations.OUT, m )
+
+            local m_mngr = self:get_modes_manager()
+            local oper = m_mngr[ m ]
+            local a_step = oper:active_step()
+
+            if a_step ~= self.prev_fill_step then
+                if a_step < self.steps.FILL.RUN.IN_TANK then
+                    self.flow_node:off()
+                else
+                    self.flow_node:on()
+                end
+                self.prev_fill_step = a_step
+            end
+        end
+    end
+end
+
+function prg.line_in_o7:user_final_operation( m )
+    if m == self.operations.FILL then
+        if self.FILL.NEED_FLOW_CONTROL then
+            self.coop_node:set_mode( self.coop_node.operations.OUT, 0 )
+        end
+        self.prev_fill_step = nil
+        self.destination_ready:off()
+    end
+end
+
+function prg.la_tank1:user_init()
+    self.steps.OUT = {}
+    self.steps.OUT.RUN = {}
+    self.steps.OUT.RUN.WORK_O7 = 1
+    self.steps.OUT.RUN.WORK_O8 = 2
+end
+
+function prg.la_tank1:user_evaluate()
+    local m = self.operations.OUT
+    if self:get_mode( m ) == 1 then
+        if self:check_low_level() then
+            self:set_mode( m, 0 )
+            self:set_err_msg( "танк пуст (НУ)", m, 0, tech_object.ERR_OFF )
+            if prg.line_in_o7.FILL.NEED_FLOW_CONTROL then
+                prg.line_in_o7.flow_node:off()
+                prg.line_in_o7.FILL.NEED_FLOW_CONTROL = false
+            elseif prg.line_in_o8.FILL.NEED_FLOW_CONTROL then
+                prg.line_in_o8.flow_node:off()
+                prg.line_in_o8.FILL.NEED_FLOW_CONTROL = false
+            elseif prg.line_in_bertsch_o7.FILL.NEED_FLOW_CONTROL then
+                prg.line_in_bertsch_o7.flow_node:off()
+                prg.line_in_bertsch_o7.FILL.NEED_FLOW_CONTROL = false
+            end
+        end
+    end
+end
+------------------------------------------------------------------------------
+function prg.tank_p4820:user_evaluate_work( m )
+    self:sync_node_state( self.work_node, self.work_node.operations.WORK,
+        m, 'prev_work_state' )
+end
+
+function prg.tank_p4820:user_final_operation( m )
+    if m == self.operations.WORK then
+        self.work_node:set_mode( self.work_node.operations.WORK, 0 )
+    end
+end
+------------------------------------------------------------------------------
+prg.tank_p4790.ALPMA_ID = 4790
+prg.tank_p4805.ALPMA_ID = 4805
+prg.tank_p4820.ALPMA_ID = 4820
+prg.tank_p4835.ALPMA_ID = 4835
+prg.tank_p4840.ALPMA_ID = 4840
+prg.tank_p4850.ALPMA_ID = 4850
+prg.tank_p4870.ALPMA_ID = 4870
+prg.tank_p4875.ALPMA_ID = 4875
+prg.tank_p4885.ALPMA_ID = 4885
+
+
+add_functionality_for_group( wash_tank,
+    prg.tank_p4790, prg.tank_p4805, prg.tank_p4820, prg.tank_p4835,
+    prg.tank_p4840, prg.tank_p4850, prg.tank_p4870, prg.tank_p4875,
+    prg.tank_p4885 )
+------------------------------------------------------------------------------
+function prg.brine_tank1:user_init()
+    self.CMD =
+        {
+        EMTYING_TANK = 105,
+        }
+
+    self.operations.FILL = 2
+    self.steps.FILL = {}
+    self.steps.FILL.RUN =
+        {
+        FILL_LINE = 1,
+        WAIT_LVL = 2,
+        PUMP_DOWN = 3,
+        WAIT_HI_LS = 4,
+        EMTYING_TANK = 5
+        }
+    self.AUTO_FILL = { AUTO_DI = DI( "ALPMAGW5DI488511" ) }
+    self.brine_ready = DI( "BRN3DI11" )
+
+    self.operations.CIRCULATION = 3
+    self.steps.CIRCULATION = {}
+    self.steps.CIRCULATION.RUN =
+        {
+        WAIT_LVL = 1,
+        PUMP_DOWN = 2,
+        WAIT_HI_LS = 3,
+        CIRCULATION_MF_2 = 4,
+        END_FILL_MF_2 = 5,
+        END_OUT_MF_2 = 6,
+        }
+    self.AUTO_CIRCULATION = { AUTO_DI = DI( "ALPMAGW5DI488513" ) }
+
+    self.operations.PUMP_OUT = 4
+    self.steps.PUMP_OUT = {}
+    self.steps.PUMP_OUT.RUN =
+        {
+        PUMP_OUT = 1,
+        EMPTY_TANK = 2,
+        PUSHING_LINE = 3
+        }
+    self.PUMP_OUT = { AUTO_DI = DI( "ALPMAGW5DI488514" ), no_off_operation = true }
+    -- Watchdogs
+    self.first_watchdog_DO = BRN3DO111
+    self.first_watchdog_DI = BRN3DI111
+    self.second_watchdog_DO = BRN3DO121
+    self.second_watchdog_DI = BRN3DI121
+    --signals steps
+    self.feed_end = BRN3DI115
+    self.concentrate_end = BRN3DI125
+end
+
+function prg.brine_tank1:exec_cmd( cmd )
+    local m = self.operations.FILL
+    if cmd == self.CMD.EMTYING_TANK and self:get_mode( m ) == 1 then
+        local m_mngr = self:get_modes_manager()
+        local oper = m_mngr[ m ]
+        oper:to_step( self.steps.FILL.RUN.EMTYING_TANK )
+    end
+end
+
+function prg.brine_tank1:user_evaluate()
+    local par = self.par_float
+    local PAR = self.PAR_FLOAT
+    local m_mngr = self:get_modes_manager()
+
+    local m = self.operations.WASHING_CIP
+    if self:get_mode( m ) == 1 then
+        local oper = m_mngr[ m ]
+        local step = oper:active_step()
+        if step == self.steps.WASHING_CIP.RUN.MEDIUM_CHANGE then
+            if not self.WASHING_CIP.MEDIUM_CHANGE_REQUEST:is_active() then
+                oper:to_step( 1 )
+            end
+            if ALPMAGW5DI488503:is_active() then
+                self.was_signal_in_step = true
+            end
+
+            if not self.LS_down:is_active() and self.was_signal_in_step then
+                oper:to_step( step + 1 )
+            end
+            if step == self.steps.WASHING_CIP.RUN.MEDIUM_CHANGE + 1 and
+                 prg.tank_p4885 == prg.tank_p4885.steps.WASHING_CIP.RUN.MEDIUM_CHANGE + 1 then
+                MCA5LINE3DO488503:on()
+            else
+                MCA5LINE3DO488503:off()
+            end
+        end
+
+    elseif self:get_mode( self.operations.FILL ) == 1 then
+        m = self.operations.FILL
+        local oper = m_mngr[ m ]
+        local step = oper:active_step()
+        if step == self.steps.FILL.RUN.FILL_LINE then
+            if self.brine_ready:is_active() then
+
+                oper:to_step( self.steps.FILL.RUN.WAIT_LVL )
+            end
+        elseif step == self.steps.FILL.RUN.WAIT_LVL then
+            if self.LS_down:is_active() and
+                self.LT:get_value() >= par[ PAR.LEVEL_WAIT_PUMP_OUT ] then
+                oper:to_step( self.steps.FILL.RUN.PUMP_DOWN )
+            end
+        elseif step == self.steps.FILL.RUN.PUMP_DOWN then
+            if not self.LS_down:is_active() then
+                oper:to_step( self.steps.FILL.RUN.WAIT_LVL )
+            elseif self.LS_up:is_active() then
+                oper:to_step( self.steps.FILL.RUN.WAIT_HI_LS )
+            end
+        elseif step == self.steps.FILL.RUN.WAIT_HI_LS then
+            if not self.LS_down:is_active() then
+                oper:to_step( self.steps.FILL.RUN.WAIT_LVL )
+            end
+        elseif step == self.steps.FILL.RUN.EMTYING_TANK then
+            if self:check_low_level() then
+                self:set_mode( m, 0 )
+                self:set_err_msg( "танк пуст (НУ)", m, 0, tech_object.ERR_OFF )
+            end
+        end
+
+    elseif self:get_mode( self.operations.CIRCULATION ) == 1 then
+        m = self.operations.CIRCULATION
+        local oper = m_mngr[ m ]
+        local step = oper:active_step()
+
+        if step == self.steps.CIRCULATION.RUN.WAIT_LVL then
+            if self.LS_down:is_active() and
+                self.LT:get_value() >= par[ PAR.LEVEL_WAIT_PUMP_OUT ] then
+                oper:to_step( self.steps.CIRCULATION.RUN.PUMP_DOWN )
+            end
+        elseif step == self.steps.CIRCULATION.RUN.PUMP_DOWN then
+            if not self.LS_down:is_active() then
+                oper:to_step( self.steps.CIRCULATION.RUN.WAIT_LVL )
+            elseif self.LS_up:is_active() then
+                oper:to_step( self.steps.CIRCULATION.RUN.WAIT_HI_LS )
+            end
+        elseif step == self.steps.CIRCULATION.RUN.WAIT_HI_LS then
+            if not self.LS_down:is_active() then
+                oper:to_step( self.steps.CIRCULATION.RUN.WAIT_LVL )
+            end
+            if self.LT:get_value() <= par[ PAR.HIGH_LEVEL_WAIT_PUMP_OUT ]
+              and not self.LS_up:is_active() then
+                oper:to_step( self.steps.CIRCULATION.RUN.PUMP_DOWN )
+            end
+        end
+
+        if oper:is_active_extra_step( self.steps.CIRCULATION.RUN.CIRCULATION_MF_2 ) then
+            self.first_watchdog_DO:set_state( self.first_watchdog_DI:get_state() )
+            self.second_watchdog_DO:set_state( self.second_watchdog_DI:get_state() )
+            if self.feed_end:is_active() and
+              not oper:is_active_extra_step( self.steps.CIRCULATION.RUN.END_FILL_MF_2 ) then
+                self:set_err_msg( "включение шага Завершение подачи на MF2 по сигналу",
+                    m, constants.NONE, tech_object.ERR_DURING_WORK )
+                oper:on_extra_step( self.steps.CIRCULATION.RUN.END_FILL_MF_2 )
+            end
+            if self.concentrate_end:is_active() and
+              not oper:is_active_extra_step( self.steps.CIRCULATION.RUN.END_OUT_MF_2 ) then
+                self:set_err_msg( "включение шага Завершение выдачи из MF2 по сигналу",
+                    m, constants.NONE, tech_object.ERR_DURING_WORK )
+                oper:on_extra_step( self.steps.CIRCULATION.RUN.END_OUT_MF_2 )
+            end
+            if oper:is_active_extra_step( self.steps.CIRCULATION.RUN.END_FILL_MF_2 ) and
+              oper:is_active_extra_step( self.steps.CIRCULATION.RUN.END_OUT_MF_2 ) then
+                local time_off_steps = constants.SEC_TO_MSEC * par[ PAR.TIME_RUNNING_END_STEPS_MF2 ]
+                if get_delta_millisec( self.timer ) > time_off_steps then
+                    for i = self.steps.CIRCULATION.RUN.CIRCULATION_MF_2, self.steps.CIRCULATION.RUN.END_OUT_MF_2 do
+                        if oper:is_active_extra_step( i ) then
+                            oper:off_extra_step( i )
+                        end
+                    end
+                end
+            else
+                self.timer = get_millisec()
+            end
+        else
+            self.first_watchdog_DO:off()
+            self.second_watchdog_DO:off()
+            for i = self.steps.CIRCULATION.RUN.CIRCULATION_MF_2, self.steps.CIRCULATION.RUN.END_OUT_MF_2 do
+                if oper:is_active_extra_step( i ) then
+                    oper:off_extra_step( i )
+                end
+            end
+        end
+
+    elseif self:get_mode( self.operations.PUMP_OUT ) == 1 then
+        m = self.operations.PUMP_OUT
+        local oper = m_mngr[ m ]
+        local step = oper:active_step()
+        if step == self.steps.PUMP_OUT.RUN.PUMP_OUT then
+            if self:check_low_level() then
+                oper:to_step( self.steps.PUMP_OUT.RUN.EMPTY_TANK )
+            end
+        elseif step == self.steps.PUMP_OUT.RUN.EMPTY_TANK then
+            if not self.PUMP_OUT.AUTO_DI:is_active() then
+                oper:to_step( self.steps.PUMP_OUT.RUN.PUSHING_LINE )
+            end
+        elseif step == self.steps.PUMP_OUT.RUN.PUSHING_LINE then
+            if not self.brine_ready:is_active() then
+                self:set_err_msg( "автоотключение по сигналу", m, 0, tech_object.ERR_OFF )
+                self:set_mode( m, 0 )
+            end
+        end
+    end
+
+    --Автоматическое включение/выключение откачки.
+    self:process_auto_operation( self.operations.PUMP_OUT, self.PUMP_OUT )
+    -- -//- наполнения.
+    self:process_auto_operation( self.operations.FILL, self.AUTO_FILL )
+    -- -//- циркуляции.
+    self:process_auto_operation( self.operations.CIRCULATION, self.AUTO_CIRCULATION )
+end
+
+function prg.brine_tank1:user_final_operation( m )
+    if m == self.operations.WASHING_CIP then
+        self.was_signal_in_step = false
+    elseif m == self.operations.CIRCULATION then
+        self.first_watchdog_DO:off()
+        self.second_watchdog_DO:off()
+    end
+end
+------------------------------------------------------------------------------
+prg.flow_node_pid_o7.milk_FQT = FQT( 'O7FQT1' )
+prg.flow_node_pid_o7.cur_flow = FQT( 'LA_TANK1FQT1' )
+prg.flow_node_pid_o7.conc_solution_AO = AO( 'LA_TANK1AO11' )
+prg.flow_node_pid_o7.LITERS_IN_CUBIC_METER = 1000
+
+function prg.flow_node_pid_o7:calc_setpoint()
+    local la_par = prg.la_tank1.par_float
+    local LA_PAR = prg.la_tank1.PAR_FLOAT
+    local MIN_CONCENTRATION = 0.001
+    local require_conc = la_par[ LA_PAR.SP_CONC_MIXTURE ]
+    self.current_conc = la_par[ LA_PAR.CONC_SOLUTION ]
+    if self.current_conc == 0 then
+        self.current_conc = MIN_CONCENTRATION
+    end
+
+    return self.LITERS_IN_CUBIC_METER * self.milk_FQT:get_flow() *
+        require_conc / self.current_conc
+end
+
+function prg.flow_node_pid_o7:evaluate_working()
+    local oper_state = self:get_operation_state( self.operations.WORKING )
+    if oper_state == operation.RUN then
+        self.PID_flow:set( self:calc_setpoint() )
+        local conc_solution = self.cur_flow:get_flow() * self.current_conc /
+            self.milk_FQT:get_flow() / self.LITERS_IN_CUBIC_METER
+        self.conc_solution_AO:set_value( conc_solution )
+
+        local PID_value = self.PID_flow:eval( self.get_PID_set_value( self.FQT1 ) )
+        self.M1:set_value( PID_value )
+    end
+end
+
+function prg.flow_node_pid_o7:restart_PID()
+    self.PID_flow:set( self:calc_setpoint() )
+    self.PID_flow:on()
+end
+
+function prg.flow_node_pid_o7:user_final_operation( m )
+    if m == self.operations.WORKING then
+        self.conc_solution_AO:off()
+    end
+end
+------------------------------------------------------------------------------
+function prg.tank_bunker1:user_init()
+    self.steps.WORK = {}
+    self.steps.WORK.RUN =
+        {
+        FILL = 1,
+        CIRCULATION = 2,
+        }
+end
+
+function prg.tank_bunker1:user_evaluate()
+    local par = self.par_float
+    local PAR = self.PAR_FLOAT
+    local m_mngr = self:get_modes_manager()
+    local m = self.operations.WORK
+    local oper_state = self:get_operation_state( m )
+
+    if self:get_mode( m ) == 1 then
+        local oper = m_mngr[ m ]
+        local step = oper:active_step()
+        if step == self.steps.WORK.RUN.FILL then
+            if self.LT:get_value() >= par[ PAR.V_LT_SET ] or self.LS_up:is_active() then
+                oper:to_step( self.steps.WORK.RUN.CIRCULATION )
+            end
+        elseif step == self.steps.WORK.RUN.CIRCULATION then
+            if self:check_low_level() and not self.LS_up:is_active() then
+                oper:to_step( self.steps.WORK.RUN.FILL )
+            end
+        end
+        if self.was_LS_err then
+            if not self.was_LS_pause then
+                self:set_mode( m, operation.PAUSE )
+                self.was_LS_pause = true
+            end
+        else
+            self.was_LS_pause = false
+        end
+    end
+end
+function prg.tank_bunker1:user_on_start( m )
+    if m == self.operations.WORK then
+        self.was_LS_pause = false
+        self.was_LS_err = false
+    end
+end
+-- ---------------------------------------------------------------------------
+prg.line_in_brn4.first_step = 1
+prg.line_in_brn4.washing_drainage = BRN4DI2
+prg.line_in_brn4.steps.WASHING_CIP.RUN.WASHING_DRAINAGE = 3
+
+function prg.line_in_brn4:user_evaluate()
+    local m = self.operations.WASHING_CIP
+    local m_mngr = self:get_modes_manager()
+    local oper = m_mngr[ m ]
+    local step = oper:active_step()
+    if self:get_mode( m ) == operation.RUN then
+        if step ~= self.steps.WASHING_CIP.RUN.WASHING_DRAINAGE then
+            if self.washing_drainage:is_active() then
+                oper:to_step( self.steps.WASHING_CIP.RUN.WASHING_DRAINAGE )
+            end
+        elseif step == self.steps.WASHING_CIP.RUN.WASHING_DRAINAGE then
+            if not self.washing_drainage:is_active() then
+                oper:to_step( self.first_step )
+            end
+        end
+    end
+end
+-- ---------------------------------------------------------------------------
+prg.line_in_o8.signal_AO = BERTSCH_MOZ_GW1AO32
+prg.line_in_o8.water = O8DI11
+prg.line_in_o8.product = O8DI12
+prg.line_in_o8.checking_node = { prg.line_in_bertsch_o7, prg.line_in_o7 }
+prg.line_in_bertsch_o7.signal_AO = BERTSCH_MOZ_GW1AO12
+prg.line_in_bertsch_o7.water = O7DI11
+prg.line_in_bertsch_o7.product = O7DI12
+prg.line_in_bertsch_o7.checking_node = { prg.line_in_o8 }
+
+translation_line = {}
+
+translation_line.user_check_on_mode = prg.line_in_o7.user_check_on_mode
+
+function translation_line:user_init()
+    self.coop_node = prg.la_tank1
+    self.type_bertsch = 32
+    self.type_o8 = 33
+    if self.tech_type == self.type_bertsch then
+        self.product_bertsch = BERTSCH_MOZ_GW1DI12
+        self.transit_ready = UF1_O7DI11
+        self.destination_ready = O7DO13
+    end
+end
+
+function translation_line:user_init_operation( m )
+    local par = self.par_float
+    local PAR = self.PAR_FLOAT
+    if m == self.operations.FILL then
+        if par[ PAR.ACTIVITY_TANK ] == 1 then
+            self.coop_node:set_mode( self.coop_node.operations.OUT, operation.RUN )
+            local m_mngr = self.coop_node:get_modes_manager()
+            local oper = m_mngr[ self.coop_node.operations.OUT ]
+            if self.tech_type == self.type_bertsch then
+                oper:to_step( self.coop_node.steps.OUT.RUN.WORK_O7 )
+            elseif self.tech_type == self.type_o8 then
+                oper:to_step( self.coop_node.steps.OUT.RUN.WORK_O8 )
+            end
+        end
+        self.FQT_value = self.product_CTR:get_abs_quantity()
+    end
+end
+
+function translation_line:user_evaluate()
+    local m = self.operations.FILL
+    local par = self.par_float
+    local PAR = self.PAR_FLOAT
+    local m_mngr = self:get_modes_manager()
+    local oper = m_mngr[ m ]
+    local a_step = oper:active_step()
+    if self:get_mode( m ) == operation.RUN then
+        local value = self.product_CTR:get_abs_quantity() - self.FQT_value
+        self.signal_AO:set_value( value )
+        local is_water = 1
+        local is_product = 0
+        if a_step == self.steps.FILL.RUN.IN_LINE then
+            if self.water:is_active() then
+                if par[ PAR.WATER_FLAG ] ~= is_water then
+                    par[ PAR.WATER_FLAG ] = is_water
+                end
+            elseif self.product:is_active() then
+                if par[ PAR.WATER_FLAG ] ~= is_product then
+                    par[ PAR.WATER_FLAG ] = is_product
+                end
+            end
+        end
+        if self.FILL.NEED_FLOW_CONTROL then
+            self:sync_node_state( self.coop_node, self.coop_node.operations.OUT, m )
+            if self.product:is_active() then
+                self.flow_node:on()
+            elseif self.water:is_active() then
+                self.flow_node:off()
+            else
+                self.flow_node:off()
+            end
+        end
+        if self.tech_type == self.type_bertsch then
+            if self.product_bertsch:is_active() and self.transit_ready:is_active() then
+                self.destination_ready:on()
+            else
+                self.destination_ready:off()
+            end
+        end
+    end
+end
+
+function translation_line:user_final_operation( m )
+    if m == self.operations.FILL then
+        self.signal_AO:off()
+        if self.FILL.NEED_FLOW_CONTROL then
+            self.coop_node:set_mode( self.coop_node.operations.OUT, 0 )
+        end
+        if self.destination_ready then self.destination_ready:off() end
+    end
+end
+
+add_functionality_for_group( translation_line, prg.line_in_o8, prg.line_in_bertsch_o7 )
+-- ---------------------------------------------------------------------------
+--Simultaneous fill and out for water_tank
+prg.line_in_wline10.TANK_FILL = prg.water_tank1.operations.WORK
+prg.line_out_wr1.TANK_OUT = prg.water_tank1.operations.WORK
+prg.line_in_wline10.steps.FILL.RUN.IN_LINE = 7
+prg.line_in_wline10.lateral_line = prg.line_out_wr1
+prg.line_out_wr1.steps.OUT.RUN.IN_LINE = 6
+prg.line_out_wr1.main_line = prg.line_in_wline10
+-- ---------------------------------------------------------------------------
+function prg.line_out_wr1:user_check_on_mode( m )
+    if m == self.operations.OUT then
+        local m_mngr = self.main_line:get_modes_manager()
+        local oper = m_mngr[ self.main_line.operations.FILL ]
+        local a_step = oper:active_step()
+        if self.m_par[ self.M_PAR.ENQ_NUMBER1_WR1 ] == self.CMD.IN_LINE then
+            if self.main_line:get_mode( self.main_line.operations.FILL ) == operation.RUN then
+                if a_step ~= self.main_line.steps.FILL.RUN.IN_LINE then
+                    self:set_err_msg( "Приемник по WLINE10 не готов", m, constants.NONE, tech_object.ERR_CANT_ON )
+                    return 1
+                end
+            else
+                self:set_err_msg( "Приемник по WLINE10 не готов", m, constants.NONE, tech_object.ERR_CANT_ON )
+                return 1
+            end
+            local res = prg.water_tank1:check_on_mode( prg.water_tank1.operations.WORK )
+            if res == 0 then
+                prg.water_tank1:set_mode( prg.water_tank1.operations.WORK, operation.RUN )
+            else
+                self:set_err_msg( "танк воды не готов", m, constants.NONE, tech_object.ERR_CANT_ON )
+                return 1
+            end
+        end
+    end
+end
+
+function prg.line_out_wr1:user_init_operation( m )
+    if m == self.operations.OUT then
+        self.time_inactivity = get_millisec()
+    end
+end
+
+function prg.line_out_wr1:user_init()
+    self.state_pump = BERTSCH_MOZ_GW1DO52
+    self.counter_value = BERTSCH_MOZ_GW1AO52
+    self.out_run_do = WR1DO11
+    self.turn_on_heating = __WR1DI11
+    self.circulation_run_do = WR1DO12
+    self.turn_on_heating_for_circulation = __WR1DI12
+    self.reset_at_end = { self.state_pump, self.turn_on_heating,
+        self.turn_on_heating_for_circulation, self.counter_value }
+    self.m_par = prg.master1.par_float
+    self.M_PAR = prg.master1.PAR_FLOAT
+end
+
+function prg.line_out_wr1:user_evaluate()
+    local m = self.operations.OUT
+    local par = self.par_float
+    local PAR = self.PAR_FLOAT
+    local m_mngr = self:get_modes_manager()
+    local oper = m_mngr[ m ]
+    local a_step = oper:active_step()
+    local oper_state = self:get_operation_state( m )
+    if self:get_mode( m ) == operation.RUN then
+        self.state_pump:set_state( WR1M1:get_state() )
+        self.turn_on_heating:set_state( self.out_run_do:get_state() )
+        self.turn_on_heating_for_circulation:set_state( self.circulation_run_do:get_state() )
+        self.counter_value:set_value( self.product_CTR:get_abs_quantity() )
+        if self.m_par[ self.M_PAR.ENQ_NUMBER1_WR1 ] == self.CMD.IN_LINE then
+            if oper_state == operation.RUN then
+                if self.main_line:get_mode( self.main_line.operations.FILL ) == operation.RUN then
+                    local main_oper_state = self.main_line:get_operation_state( self.main_line.operations.FILL )
+                    if main_oper_state ~= operation.RUN then
+                        self:set_err_msg( "Приемник по WLINE10 не готов", m,
+                        constants.NONE, tech_object.ERR_TO_FAIL_STATE )
+                        self:set_mode( m, operation.PAUSE )
+                    end
+                else
+                    self:set_err_msg( "Приемник по WLINE10 не готов", m,
+                    constants.NONE, tech_object.ERR_TO_FAIL_STATE )
+                    self:set_mode( m, operation.PAUSE )
+                end
+                local t_par = prg.water_tank1.par_float
+                local T_PAR = prg.water_tank1.PAR_FLOAT
+
+                if t_par[ T_PAR.HEAT_TEMPERATURE ] ~= par[ PAR.HEAT_TEMPERATURE ] then
+                    t_par[ T_PAR.HEAT_TEMPERATURE ] = par[ PAR.HEAT_TEMPERATURE ]
+                end
+                if prg.water_tank1.TE:get_value() >= t_par[ T_PAR.HEAT_TEMPERATURE ] - t_par[ T_PAR.HEAT_TEMPERATURE_DELTA ] then
+                    if get_delta_millisec( self.time_inactivity ) >= t_par[ T_PAR.CHECK_TIME_HEAT_TEMPERATURE ] * constants.SEC_TO_MSEC then
+                        prg.water_tank1:set_err_msg( "Температура "..t_par[ T_PAR.HEAT_TEMPERATURE ].."°С достигнута",
+                        prg.water_tank1.operations.WORK, constants.NONE, tech_object.ERR_OFF )
+                        prg.master1:set_mode( prg.master1.operations.OUT_GROUP.WR1, operation.IDLE )
+                        prg.master1:set_mode( prg.master1.operations.FILL_GROUP.W_LINE_10, operation.IDLE )
+                        prg.water_tank1:set_mode( prg.water_tank1.operations.WORK, operation.IDLE )
+                    end
+                else
+                    self.time_inactivity = get_millisec()
+                end
+            else
+                self.time_inactivity = get_millisec()
+            end
+            self:sync_node_state( prg.water_tank1, prg.water_tank1.operations.WORK, m )
+        end
+        if a_step == self.steps.OUT.RUN.OUT_TANK or a_step == self.steps.OUT.RUN.OUT_WATER then
+            par[ PAR.HEAT_TEMPERATURE ] = BERTSCH_MOZ_GW1AI51:get_value()
+        end
+        --Translate temperature to heater_node if value was changed
+        local h_par = self.heater_node.par_float
+        local H_PAR = self.heater_node.PAR_FLOAT
+        if h_par[ H_PAR.HEAT_TEMPERATURE ] ~= par[ PAR.HEAT_TEMPERATURE ] then
+            h_par[ H_PAR.HEAT_TEMPERATURE ] = par[ PAR.HEAT_TEMPERATURE ]
+        end
+    end
+end
+
+function prg.line_out_wr1:user_final_operation( m )
+    if m == self.operations.OUT then
+        for i = 1, #self.reset_at_end do
+            self.reset_at_end[ i ]:off()
+        end
+        if self.m_par[ self.M_PAR.ENQ_NUMBER1_WR1 ] == self.CMD.IN_LINE then
+            prg.water_tank1:set_mode( prg.water_tank1.operations.WORK, operation.IDLE )
+        end
+    end
+end
+-- ---------------------------------------------------------------------------
+function prg.water_tank1:user_final_operation( m )
+    local par = self.par_float
+    local PAR = self.PAR_FLOAT
+    local batch_operation = 17
+    if m == self.operations.WASHING_CIP then
+        --Turn_on batch
+        prg.master1:set_mode( batch_operation, operation.RUN )
+        par[ PAR.V_ACCEPTING_SET ] = par[ PAR.V_ACCEPTING_SET_AFTER_CIP ]
+    end
+end
+------------------------------------------------------------------------------
+function prg.master1:delay_init()
+    local PAR = self.PAR_FLOAT
+    self.operations =
+        {
+        FILL_GROUP =
+            {
+            O7  = 6,
+            IN1 = 7,
+            BRN4 = 14,
+            O7_BERTSCH = 15,
+            O8_BERTSCH = 16,
+            W_LINE_10 = 21,
+            },
+        OUT_GROUP =
+            {
+            OUT1 = 8,
+            WR1 = 22,
+            },
+        }
+    self:add_unit_batch( 1, prg.tank_coag1 )
+    self:add_unit_batch( 9, prg.f_brine_tank1 )
+    self:add_unit_batch( 10, prg.f_brine_tank2 )
+    self:add_unit_batch( 17, prg.water_tank1 )
+
+    self.fill_group_info =
+        {
+        [ self.operations.FILL_GROUP.O7 ] =
+            {
+            line = prg.line_in_o7,      --Линия, по которой идет наполнение.
+
+            --№ параметров первого и последнего танков очереди.
+            FIRST_SOURCE_TANK_PARAM = self.PAR_FLOAT.ENQ_O7_TANK1_ALPMA,
+            LAST_SOURCE_TANK_PARAM  = self.PAR_FLOAT.ENQ_O7_TANK5_ALPMA,
+            },
+        [ self.operations.FILL_GROUP.IN1 ] =
+            {
+            line = prg.line_in_f_brine_in1,      --Линия, по которой идет наполнение.
+
+            --№ параметров первого и последнего танков очереди.
+            FIRST_SOURCE_TANK_PARAM = self.PAR_FLOAT.ENQ_F_BRINE_IN_TANK1,
+            LAST_SOURCE_TANK_PARAM  = self.PAR_FLOAT.ENQ_F_BRINE_IN_TANK2,
+            },
+        [ self.operations.FILL_GROUP.BRN4 ] =
+            {
+            line = prg.line_in_brn4,      --Линия, по которой идет наполнение.
+
+            --№ параметров первого и последнего танков очереди.
+            FIRST_SOURCE_TANK_PARAM = self.PAR_FLOAT.ENQ_BRN4_TANK1,
+            LAST_SOURCE_TANK_PARAM  = self.PAR_FLOAT.ENQ_BRN4_TANK4,
+            },
+        [ self.operations.FILL_GROUP.O7_BERTSCH ] =
+            {
+            line = prg.line_in_bertsch_o7,      --Линия, по которой идет наполнение.
+
+            --№ параметров первого и последнего танков очереди.
+            FIRST_SOURCE_TANK_PARAM = self.PAR_FLOAT.ENQ_O7_TANK1_BERTSCH,
+            LAST_SOURCE_TANK_PARAM  = self.PAR_FLOAT.ENQ_O7_TANK5_BERTSCH,
+            },
+        [ self.operations.FILL_GROUP.O8_BERTSCH ] =
+            {
+            line = prg.line_in_o8,      --Линия, по которой идет наполнение.
+
+            --№ параметров первого и последнего танков очереди.
+            FIRST_SOURCE_TANK_PARAM = self.PAR_FLOAT.ENQ_O8_TANK1,
+            LAST_SOURCE_TANK_PARAM  = self.PAR_FLOAT.ENQ_O8_TANK5,
+            },
+        [ self.operations.FILL_GROUP.W_LINE_10 ] =
+            {
+            line = prg.line_in_wline10,      --Линия, по которой идет наполнение.
+
+            TANK_FILL = prg.water_tank1.operations.WORK,
+
+            --№ параметров первого и последнего танков очереди.
+            FIRST_SOURCE_TANK_PARAM = self.PAR_FLOAT.ENQ_NUMBER1_WLINE10,
+            LAST_SOURCE_TANK_PARAM  = self.PAR_FLOAT.ENQ_NUMBER3_WLINE10,
+            },
+        }
+    self.out_group_info =
+        {
+        [ self.operations.OUT_GROUP.OUT1 ] =
+            {
+            line    = prg.line_out_f_brine_out1,              --Линия, по которой идет выдача.
+
+            --№ параметра для линии для режима работы;
+            --№ параметра, куда пишем новый шаг;
+            --№ операции выдачи для линии.
+            MANUAL_PAR_N = prg.line_out_f_brine_out1.PAR_FLOAT.OPER_MODE,
+            STEP_N       = prg.line_out_f_brine_out1.PAR_FLOAT.OPER_SRC,
+            LINE_OUT     = prg.line_out_f_brine_out1.operations.OUT,
+
+            TANK_OUT = prg.f_brine_tank1.operations.OUT,--№ операции выдачи для танка.
+            FIRST_DST_TANK_N = 1,               --№ первого танка.
+            LAST_DST_TANK_N  = 2,               --№ последнего танка.
+
+            --№ параметров первого и последнего танков очереди.
+            FIRST_DST_TANK_PARAM = self.PAR_FLOAT.ENQ_F_BRINE_OUT_TANK1,
+            LAST_DST_TANK_PARAM  = self.PAR_FLOAT.ENQ_F_BRINE_OUT_TANK2,
+            },
+        [ self.operations.OUT_GROUP.WR1 ] =
+            {
+            line    = prg.line_out_wr1,              --Линия, по которой идет выдача.
+
+            --№ параметра для линии для режима работы;
+            --№ параметра, куда пишем новый шаг;
+            --№ операции выдачи для линии.
+            MANUAL_PAR_N = prg.line_out_wr1.PAR_FLOAT.OPER_MODE,
+            STEP_N       = prg.line_out_wr1.PAR_FLOAT.OPER_SRC,
+            LINE_OUT     = prg.line_out_wr1.operations.OUT,
+
+            TANK_OUT = prg.water_tank1.operations.WORK,--№ операции выдачи для танка.
+            FIRST_DST_TANK_N = 1,               --№ первого танка.
+            LAST_DST_TANK_N  = 1,               --№ последнего танка.
+
+            --№ параметров первого и последнего танков очереди.
+            FIRST_DST_TANK_PARAM = self.PAR_FLOAT.ENQ_NUMBER1_WR1,
+            LAST_DST_TANK_PARAM  = self.PAR_FLOAT.ENQ_NUMBER3_WR1,
+            },
+        }
+end
+-- ---------------------------------------------------------------------------
+function prg.master1:user_init_operation( m )
+    local par = self.par_float
+    if m == self.operations.FILL_GROUP.W_LINE_10 then
+        local info = self.fill_group_info[ m ]
+        if par[ info.FIRST_SOURCE_TANK_PARAM ] == info.line.CMD.IN_LINE then
+            local l_oper_mngr = info.line:get_modes_manager()
+            local l_oper = l_oper_mngr[ info.line.operations.FILL ]
+            l_oper:to_step( info.line.steps.FILL.RUN.IN_LINE )
+        end
+    end
+end
+------------------------------------------------------------------------------
+--Пользовательская функция инициализации, выполняемая однократно в PAC.
+
+function user_init()
+    alpma:Init()
+    bertsch:Init()
+    prg.master1:delay_init()
+    pumps:init( prg.master1 )
+    pumps:add_signal(
+        { ALPMAGW5AI480512, 'P4805M1' },
+        { ALPMAGW5AI482012, 'P4820M1' },
+        { ALPMAGW5AI483512, 'P4835M1' },
+        { ALPMAGW5AI484012, 'P4840M1' },
+        { ALPMAGW5AI485012, 'P4850M1' },
+        { ALPMAGW5AI487012, 'P4870M1' },
+        { ALPMAGW5AI487512, 'P4875M1' },
+        { ALPMAGW5AI488512, 'P4885M1' } )
+
+    safety:init( prg.master1 )
+    safety:add_btn(
+        { CAB1SB1, 'CAB1SB1' },
+        { CAB2SB1, 'CAB2SB1' },
+        { CAB3SB1, 'CAB3SB1' },
+        { CAB4SB1, 'CAB4SB1' },
+        { CAB5SB1, 'CAB5SB1' } )
+    safety:add_rly(
+        { CAB1DI2, 'CAB1DI2' },
+        { CAB2DI2, 'CAB2DI2' },
+        { CAB3DI2, 'CAB3DI2' },
+        { CAB4DI2, 'CAB4DI2' },
+        { CAB5DI2, 'CAB5DI2' } )
+
+    -- Установка начальных значений
+    if G_PAC_INFO():is_emulator() == true then
+        for i = 1, 1 do
+            prg.master1:set_cmd( "CMD", 0, 1001 + i - 1 ) --Пуск партии.
+        end
+        __LA_TANK1LS1:set_cmd( "ST", 0, 1 )
+        __MCA4LINE3DI21:set_cmd( "ST", 0, 1 )
+        __WATER_TANK1LS1:set_cmd( "ST", 0, 1 )
+        __WATER_TANK1LS2:set_cmd( "ST", 0, 1 )
+    end
+    WLINE10FQT1_VIRT = virtual_FQT( 'WLINE10FQT1' )
+end
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+WLINE5DO12_flag = {}
+
+--Пользовательская функция, выполняемая каждый цикл в PAC.
+
+function user_eval()
+    bertsch:Evaluate()
+    alpma:Evaluate()
+    pumps:evaluate()
+    safety:evaluate()
+    local st
+    if P4820V1:get_state() == 1 then st = 1 else st = 0 end
+    ALPMAGW5DO482011:set_state( st )
+    if P4820V2:get_state() == 1 then st = 1 else st = 0 end
+    ALPMAGW5DO482012:set_state( st )
+
+    ALPMAGW5AO484011:set_value( P4840TE1:get_value() )
+    ALPMAGW5AO487011:set_value( P4870TE1:get_value() )
+    ALPMAGW5AO487511:set_value( P4875TE1:get_value() )
+    ALPMAGW5AO488511:set_value( P4885TE1:get_value() )
+    --lifebit Alpma
+    ALPMAGW5DO1:set_state( ALPMAGW5DI1:get_state() )
+
+    THWP1DO479012:set_state( ALPMAGW5DI479012:get_state() )
+    ALPMAGW5DO479012:set_state( THWP1DI479012:get_state() )
+    --Whey signals
+    BERTSCH_MOZ_GW1DO71:set_state( W14DI1:get_state() )
+    BERTSCH_MOZ_GW1DO61:set_state( W14DI11:get_state() )
+    W14DO11:set_state( BERTSCH_MOZ_GW1DI61:get_state() )
+    --Translate counter value
+    WLINE10FQT1_VIRT:eval( WLINE10AI12:get_value(), WLINE10AI12:get_value(), 0 )
+end
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+--Функция инициализации параметров, выполняемая однократно в PAC.
+
+function user_init_params()
+end
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------

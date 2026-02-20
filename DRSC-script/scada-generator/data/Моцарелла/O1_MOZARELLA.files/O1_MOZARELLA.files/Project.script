@@ -1,0 +1,3056 @@
+//---StaticFunctionsBegin
+static TnkNum, BRNTnkNum, Tank, ModeTank, EnabledElements, SUNum, WNum, AvtNum, TnkStat, BELTNum, PumpNum;
+static PostsSignals, StartLog, NTrend;
+static modeLineIn, modeLineOut, modeLineInFBrine, modeWash, opStates, modeMix, modeCoolFBRN, modeMixFBRN,  modeMaster, ModeFBRN, ModeCoag, ModeLA, modeBrine, modeMixLA, modeWB,  modeHeatingCoag, modeTankBoil, modeHeat, modeCool, modeTankWhey, modeBunker, modeFlowObj, modeLevelObj, modeTempObj, modePressObj, modeHeating, modeBLineIn;
+static TanksCount, TanksCountBRN, TanksCountB, TnkObjBtnStart, TnkObjBtnStartWash, TnkObjBtnStartWHEY, TnkObjBtnStartBR,  MixObjBtnStart, MixObjBtnStartBRN, WashObjBtnStart, CoolObjBtnStartBRN, TnkMasterModesStart, SUObjBtnStart, TankWObjBtnStart, HeatObjBtnStart, MasterObjBtnStart, AvtObjBtnStart, BELTObjBtnStart, PumpObjBtnStart;
+static TnkObjBtnStart4790, TnkObjBtnStart4805, TnkObjBtnStart4820, TnkObjBtnStart4835, TnkObjBtnStart4840, TnkObjBtnStart4850, TnkObjBtnStart4870, TnkObjBtnStart4875, TnkObjBtnStart4885;
+static TnkObjBtnStartBun, TnkObjBtnStartLA, TnkObjBtnStartBRN;
+static ProductCount, ProductType, ProductFat, ProductFate;
+static num_trend, pidNum, pid;
+static LinesInNames, LinesOutNames;
+static ProjectId;
+static didoNum, fqtnum, teNum, ptNum, ltNum, lNum, aiNum, mNum, vcNum, qtNum;
+static tanks, tankselements;
+static modeLineW14;
+static modeWT;
+function extern InitBlock;
+  TnkNum := 1; //сыроизготовитель
+  BRNTnkNum := 2;//танки дозирования рассола
+  StartLog := 0;
+  pid := 1;
+  teNum:=1;
+  ptNum:=1;
+  fqtNum:=1;
+  lNum:=1;
+  ltNum:=1;
+  aiNum:=1;
+  didoNum:=1;
+  mNum:=1;
+  vcNum:=1;
+  qtNum:=1;
+  ProjectId:=0;  //  в соответствии с проектом
+  
+  EnabledElements := array(2, 32);
+  
+  
+  ModeTank:= array(2, 8);//операции объектов
+  ModeTank[0, 0]:= 'Мойка';
+  ModeTank[0, 1]:= 'Производство';
+  ModeTank[0, 2]:= '';
+  ModeTank[0, 3]:= '';
+  ModeTank[0, 4]:= '';
+  ModeTank[0, 5]:= '';
+  ModeTank[0, 6]:= '';
+  ModeTank[0, 7]:= '';
+  
+  ModeTank[1, 0]:= 'Мойка'; //операции объектов
+  ModeTank[1, 1]:= 'Производство';
+  ModeTank[1, 2]:= '';
+  ModeTank[1, 3]:= '';
+  ModeTank[1, 4]:= '';
+  ModeTank[1, 5]:= '';
+  ModeTank[1, 6]:= '';
+  ModeTank[1, 7]:= '';
+  
+  
+  ModeFBRN:= array(2, 8);//операции танков доз.рассола
+  ModeFBRN[0, 0]:= 'Мойка';
+  ModeFBRN[0, 1]:= 'Наполнение';
+  ModeFBRN[0, 2]:= 'Растворение';
+  ModeFBRN[0, 3]:= 'Хранение';
+  ModeFBRN[0, 4]:= 'Выдача';
+  ModeFBRN[0, 5]:= '';
+  ModeFBRN[0, 6]:= '';
+  ModeFBRN[0, 7]:= '';
+  
+  ModeFBRN[1, 0]:= 'Мойка'; //операции танков доз.рассола
+  ModeFBRN[1, 1]:= 'Наполнение';
+  ModeFBRN[1, 2]:= 'Растворение';
+  ModeFBRN[1, 3]:= 'Хранение';
+  ModeFBRN[1, 4]:= 'Выдача';
+  ModeFBRN[1, 5]:= '';
+  ModeFBRN[1, 6]:= '';
+  ModeFBRN[1, 7]:= '';
+  
+  ModeWT:= array(2, 8);//операции танков воды
+  ModeWT[0, 0]:= 'Мойка';
+  ModeWT[0, 1]:= 'Наполнение';
+  ModeWT[0, 2]:= 'Хранение';
+  ModeWT[0, 3]:= 'Выдача';
+  ModeWT[0, 4]:= 'Работа';
+  ModeWT[0, 5]:= '';
+  ModeWT[0, 6]:= '';
+  ModeWT[0, 7]:= '';
+  
+  ModeWT[1, 0]:= 'Мойка'; //операции танков воды
+  ModeWT[1, 1]:= 'Наполнение';
+  ModeWT[1, 2]:= 'Хранение';
+  ModeWT[1, 3]:= 'Выдача';
+  ModeWT[1, 4]:= 'Работа';
+  ModeWT[1, 5]:= '';
+  ModeWT[1, 6]:= '';
+  ModeWT[1, 7]:= '';
+  
+  
+  ModeTankWhey:= array(2, 8);//операции танка откачки сыворотки
+  ModeTankWhey[0, 0]:= 'Мойка';
+  ModeTankWhey[0, 1]:= 'Работа';
+  ModeTankWhey[0, 2]:= '';
+  ModeTankWhey[0, 3]:= '';
+  ModeTankWhey[0, 4]:= '';
+  ModeTankWhey[0, 5]:= '';
+  ModeTankWhey[0, 6]:= '';
+  ModeTankWhey[0, 7]:= '';
+  
+  ModeTankWhey[1, 0]:= 'Мойка';   //операции танка откачки сыворотки
+  ModeTankWhey[1, 1]:= 'Работа';
+  ModeTankWhey[1, 2]:= '';
+  ModeTankWhey[1, 3]:= '';
+  ModeTankWhey[1, 4]:= '';
+  ModeTankWhey[1, 5]:= '';
+  ModeTankWhey[1, 6]:= '';
+  ModeTankWhey[1, 7]:= '';
+  
+  ModeCoag:= array(2, 8);//операции сыроизготовителя
+  ModeCoag[0, 0]:= 'Мойка';
+  ModeCoag[0, 1]:= 'Наполнение';
+  ModeCoag[0, 2]:= 'Нагрев';
+  ModeCoag[0, 3]:= 'Выдача';
+  ModeCoag[0, 4]:= '';
+  ModeCoag[0, 5]:= '';
+  ModeCoag[0, 6]:= '';
+  ModeCoag[0, 7]:= '';
+  
+  ModeCoag[1, 0]:= 'Мойка';  //операции сыроизготовителя
+  ModeCoag[1, 1]:= 'Наполнение';
+  ModeCoag[1, 2]:= 'Нагрев';
+  ModeCoag[1, 3]:= 'Выдача';
+  ModeCoag[1, 4]:= '';
+  ModeCoag[1, 5]:= '';
+  ModeCoag[1, 6]:= '';
+  ModeCoag[1, 7]:= '';
+  
+  ModeLA:= array(2, 8);//операции бачка лимонной кислоты
+  ModeLA[0, 0]:= 'Мойка';
+  ModeLA[0, 1]:= 'Наполнение';
+  ModeLA[0, 2]:= 'Хранение';
+  ModeLA[0, 3]:= 'Выдача';
+  ModeLA[0, 4]:= '';
+  ModeLA[0, 5]:= '';
+  ModeLA[0, 6]:= '';
+  ModeLA[0, 7]:= '';
+  
+  ModeLA[1, 0]:= 'Мойка';  //операции бачка лимонной кислоты
+  ModeLA[1, 1]:= 'Наполнение';
+  ModeLA[1, 2]:= 'Хранение';
+  ModeLA[1, 3]:= 'Выдача';
+  ModeLA[1, 4]:= '';
+  ModeLA[1, 5]:= '';
+  ModeLA[1, 6]:= '';
+  ModeLA[1, 7]:= '';
+  
+  ModeBrine:= array(2, 8);//операции танка рассола
+  ModeBrine[0, 0]:= 'Мойка';
+  ModeBrine[0, 1]:= 'Наполнение в 4885';
+  ModeBrine[0, 2]:= 'Циркуляция через 4885';
+  ModeBrine[0, 3]:= 'Откачка из 4885';
+  ModeBrine[0, 4]:= '';
+  ModeBrine[0, 5]:= '';
+  ModeBrine[0, 6]:= '';
+  ModeBrine[0, 7]:= '';
+  
+  ModeBrine[1, 0]:= 'Мойка';  //операции танка рассола
+  ModeBrine[1, 1]:= 'Наполнение в 4885';
+  ModeBrine[1, 2]:= 'Циркуляция через 4885';
+  ModeBrine[1, 3]:= 'Откачка из 4885';
+  ModeBrine[1, 4]:= '';
+  ModeBrine[1, 5]:= '';
+  ModeBrine[1, 6]:= '';
+  ModeBrine[1, 7]:= '';
+  
+  TanksCount := 1; //4  номера (количество) коагуляторов (танков) TankObj1 20
+  TanksCountBRN := 2;
+  TanksCountB := 0;
+  TnkObjBtnStart := 19; //номер объекта танка OBJ20
+  HeatObjBtnStart := 23;  // номер объекта узла перемешивания OBJ23
+  TnkMasterModesStart := 1; //откоректировать в соответсвии с проектом операции мастера, для партии продукта
+  MasterObjBtnStart := 1;  // номер объекта master OBJ1
+  TnkObjBtnStart4790 := 2; // номер объекта 4790 obj
+  TnkObjBtnStart4805 := 3; // номер объекта 4805 obj
+  TnkObjBtnStart4820 := 4; // номер объекта 4820  obj
+  TnkObjBtnStart4835 := 5; // номер объекта 4835 obj
+  TnkObjBtnStart4840 := 6; // номер объекта 4840 obj
+  TnkObjBtnStart4850 := 7; // номер объекта 4850 obj
+  TnkObjBtnStart4870 := 8; // номер объекта 4870 obj
+  TnkObjBtnStart4875 := 9; // номер объекта 4875 obj
+  TnkObjBtnStart4885 := 19; // номер объекта 4885 obj
+  TnkObjBtnStartBun :=  26;// бункер фасовки
+  TnkObjBtnStartLA :=  21;// бачок лимонной кислоты
+  MixObjBtnStart := 23;  // номер объекта узла перемешивания OBJ23
+  TnkObjBtnStartBRN := 22; //танк рассола 1
+  TnkObjBtnStartBR := 28; //номер объекта танка OBJ20
+  MixObjBtnStartBRN := 34;  // номер объекта узла перемешивания OBJ23
+  CoolObjBtnStartBRN := 32;  // номер объекта узла перемешивания OBJ23
+  TnkObjBtnStartWHEY :=25;
+  WashObjBtnStart := 37; //wash1
+  TnkObjBtnStartWash := 38;//wash2
+  
+  modeLineIn := array(1, 3);   // операции линий наполнения
+  modeLineIn[0, 0] := 'Мойка';
+  modeLineIn[0, 1] := 'Наполнен.';
+  modeLineIn[0, 2] := 'Наполнен. в Ультрафильтрации';
+  
+  modeLineW14 := array(1, 2);
+  modeLineW14[0, 0] := 'Мойка';
+  modeLineW14[0, 1] := 'Выдача';
+  
+  
+  modeLineInFBrine := array(1, 2);   // операции линий наполнения
+  modeLineInFBrine[0, 0] := 'Наполненение';
+  modeLineInFBrine[0, 1] := '';
+  
+  modeLineOut := array(1, 2);   // операции линий наполнения
+  modeLineOut[0, 0] := 'Мойка';
+  modeLineOut[0, 1] := 'Выдача';
+  
+  modeWash := array(1, 2);   // операции линий wash1-2
+  modeWash[0, 0] := 'Мойка';
+  modeWash[0, 1] := '';
+  
+  modeBunker := array(1, 2);   // операции бункера
+  modeBunker[0, 0] := 'Мойка';
+  modeBunker[0, 1] := 'Циркуляция';
+  
+  
+  modeWB := array(1, 3); //операции  wline5 and brn3
+  modeWB[0, 0] := 'Мойка';
+  modeWB[0, 1] := '';
+  modeWB[0, 2] := '';
+  
+  modeCoolFBRN := array(1, 2);   // операции линий наполнения
+  modeCoolFBRN[0, 0] := 'Охлаждение';
+  modeCoolFBRN[0, 1] := '';
+  
+  modeMixFBRN := array(1, 2);   // операции линий наполнения
+  modeMixFBRN[0, 0] := 'Перемешивание';
+  modeMixFBRN[0, 1] := '';
+  
+  modeFlowObj := array(1, 2);   //операции пид-регулятора
+  modeFlowObj[0, 0] := 'Работа';
+  modeFlowObj[0, 1] := '';
+  
+  modeBLineIn := array(1, 3);   // операции линий наполнения
+  modeBLineIn[0, 0] := 'Мойка BRN4';
+  modeBLineIn[0, 1] := 'Наполнен. BRN4';
+  modeBLineIn[0, 2] := '';
+  
+  { modeTempObj := array(1, 2);   //операции пид-регулятора
+  modeTempObj[0, 0] := 'Работа';
+  modeTempObj[0, 1] := '';
+  
+  modeLevelObj := array(1, 2);   //операции пид-регулятора
+  modeLevelObj[0, 0] := 'Работа';
+  modeLevelObj[0, 1] := '';}
+  
+  modePressObj := array(1, 2);   //операции пид-регулятора
+  modePressObj[0, 0] := 'Работа';
+  modePressObj[0, 1] := '';
+  
+  modeMaster := array(1, 31); //операции мастера
+  modeMaster [0, 0] := 'Приготовление партии продукта в танке №1'; //коагулятор(сыроизготовитель)
+  modeMaster [0, 1] := 'Приготовление партии продукта в танке №2';
+  modeMaster [0, 2] := 'Приготовление партии продукта в танке №3';
+  modeMaster [0, 3] := 'Приготовление партии продукта в танке №4';
+  modeMaster [0, 4] := 'Приготовление партии продукта в танке №5';
+  modeMaster [0, 5] := 'Наполнение танков по линии O7';   //коагулятор(сыроизготовитель)
+  modeMaster [0, 6] := 'Линия наполнения водой (Танки дозирования рассола)';
+  modeMaster [0, 7] := 'Линия выдачи (Танки дозирования рассола)';
+  modeMaster [0, 8] := 'Приготовление партии продукта в танке доз. рассола №1';
+  modeMaster [0, 9] := 'Приготовление партии продукта в танке доз. рассола №2';
+  modeMaster [0, 10] := '';
+  modeMaster [0, 11] := '';
+  modeMaster [0, 12] := 'Выдача из танков по линии W2';
+  modeMaster [0, 13] := 'Наполнение танков по линии BRN4';
+  modeMaster [0, 14] := 'Наполнение танков по линии O7 BERTSCH';
+  modeMaster [0, 15] := 'Наполнение танков по линии O8';
+  modeMaster [0, 16] := 'Приготовление партии продукта в танке воды №1';
+  modeMaster [0, 17] := 'Приготовление партии продукта в танке воды №2';
+  modeMaster [0, 18] := 'Приготовление партии продукта в танке воды №3';
+  modeMaster [0, 19] := 'Приготовление партии продукта в танке воды №4';
+  modeMaster [0, 20] := 'Наполнение танков воды по линии WLINE10';
+  modeMaster [0, 21] := 'Выдача из танков воды по линии воды WR1';
+  modeMaster [0, 22] := '';  
+  modeMaster [0, 23] := '';
+  modeMaster [0, 24] := '';
+  modeMaster [0, 25] := '';
+  modeMaster [0, 26] := '';
+  modeMaster [0, 27] := '';
+  modeMaster [0, 28] := '';
+  modeMaster [0, 29] := 'Выдача воды WLINE5>>BERTSCH';
+  modeMaster [0, 30] := '';
+  
+  opStates := array(1, 5);
+  opStates[0, 1] := 'Вып-ние';
+  opStates[0, 2] := 'Пауза';
+  opStates[0, 3] := 'Стоп';
+  
+  modeCool := array(1, 2); //операции охладителей
+  modeCool[0, 0] := 'Охлаждение';
+  modeCool[0, 1] := '';
+  
+  modeMixLA := array(1, 2); //операции узлов перемешивания LA
+  modeMixLA[0, 0] := 'Перемешивание';
+  modeMixLA[0, 1] := '';
+  
+  modeHeating := array(1, 5); //операции узлов подогрева
+  modeHeating[0, 0] := 'Нагрев' ;
+  modeHeating[0, 1] := '';
+  modeHeating[0, 2] := '' ;
+  modeHeating[0, 3] := '';
+  modeHeating[0, 4] := '';
+  
+  modeHeatingCoag := array(1, 5); //операции узлов подогрева  сыроизготовителя
+  modeHeatingCoag[0, 0] := 'Подогрев' ;
+  modeHeatingCoag[0, 1] := '';
+  modeHeatingCoag[0, 2] := '' ;
+  modeHeatingCoag[0, 3] := '';
+  modeHeatingCoag[0, 4] := '';
+  
+  ProductCount := 2;      //тип продукта
+  ProductType := array(1, 11);
+  ProductType[0, 0] := '';
+  ProductType[0, 1] := 'Фета';
+  ProductType[0, 2] := 'Адыгейский';
+  ProductType[0, 3] := 'Сброс продукта';
+  ProductType[0, 4] := '';
+  ProductType[0, 5] := '';
+  ProductType[0, 6] := '';
+  ProductType[0, 7] := '';
+  ProductType[0, 8] := '';
+  ProductType[0, 9] := '';
+  ProductType[0, 10] := '';
+  
+endf;
+
+function extern DrawHLA(HLA);  //HLA
+  if (HLA.allocate='C')
+    
+    if (HLA.M = 1)
+      if (HLA.L_GREEN=1)
+        HLA.setframes(6,0,2);
+        HLA.selframe(1);
+      end;
+      if (HLA.L_RED=1)
+        HLA.setframes(6,0,4);
+        HLA.selframe(1);
+      end;
+      if (HLA.L_YELLOW=1)
+        HLA.setframes(6,0,3);
+        HLA.selframe(1);
+      end;
+      if (HLA.L_SIREN=1)
+        HLA.setframes(6,0,5);
+        HLA.selframe(1);
+      end;
+      if ((HLA.L_GREEN=0) and (HLA.L_RED=0) and (HLA.L_YELLOW=0) and (HLA.L_SIREN=0))
+        HLA.setframes(6,0,1);
+      end;
+    else
+      if (HLA.L_GREEN=1)
+        HLA.setframes(0,2);
+        HLA.selframe(1);
+      end;
+      if (HLA.L_RED=1)
+        HLA.setframes(0,4);
+        HLA.selframe(1);
+      end;
+      if (HLA.L_YELLOW=1)
+        HLA.setframes(0,3);
+        HLA.selframe(1);
+      end;
+      if (HLA.L_SIREN=1)
+        HLA.setframes(0,5);
+        HLA.selframe(1);
+      end;
+      if ((HLA.L_GREEN=0) and (HLA.L_RED=0) and (HLA.L_YELLOW=0) and (HLA.L_SIREN=0))
+        HLA.setframes(0);
+        HLA.selframe(1);
+      end;
+    end;
+  end;
+endf;
+
+function extern DrawIOLinkMixValve(obj);
+  
+  local lstr;
+  lstr := '0';
+  if (obj.M=1)
+    lstr := '5,'+lstr;
+  end;
+  if ((obj.P_FB=0) and (obj.ST>=0))
+    lstr := lstr+',7';
+  end;
+  if ((obj.CS=1) and (obj.ST<0))
+    lstr := lstr+',6';
+  end;
+  if (obj.BLINK=1)
+    lstr := lstr+',10';
+  end;
+  
+  local cmd;
+  cmd := obj.name+'.setframes('+lstr+')';
+  &&cmd;
+  
+  if (obj.ST=0)
+    obj.selframe(1);
+  end;
+  
+  if (obj.ST=1)
+    obj.selframe(3);
+  end;
+  
+  if (obj.ST=2)
+    obj.selframe(8);
+  end;
+  
+  if (obj.ST=3)
+    obj.selframe(9);
+  end;
+  
+  if (obj.ST=-1)
+    obj.selframe(4);
+  end;
+  
+  if (obj.ST=-2)
+    obj.selframe(4);
+  end;
+  
+  if (obj.ST=-3)
+    obj.selframe(2);
+  end;
+  
+  
+  if (obj.ST=10)
+    obj.selframe(1);
+  end;
+  
+  if (obj.ST=11)
+    obj.selframe(3);
+  end;
+  
+  if (obj.ST=20)
+    obj.selframe(1);
+  end;
+  
+  if (obj.ST=21)
+    obj.selframe(3);
+  end;
+  
+  if (obj.ST=22)
+    obj.selframe(8);
+  end;
+  
+  if (obj.ST=23)
+    obj.selframe(9);
+  end;
+  
+  if (obj.ST=30)
+    obj.selframe(1);
+  end;
+  
+  if (obj.ST=31)
+    obj.selframe(3);
+  end;
+  
+  if (obj.ST=32)
+    obj.selframe(8);
+  end;
+  
+  if (obj.ST=33)
+    obj.selframe(9);
+  end;
+  
+  if (obj.ST=-12)
+    obj.selframe(4);
+  end;
+  
+  if (obj.ST=-13)
+    obj.selframe(2);
+  end;
+  
+endf;
+
+
+function extern DrawIOLink_VK_Valve(obj);
+  
+  if (obj.State=0)
+    obj.setframes(0);
+    obj.selframe(1);
+  end;
+  
+  if (obj.State=1)
+    obj.setframes(0);
+    obj.selframe(3);
+  end;
+  
+  if (obj.State=2)
+    obj.setframes(0);
+    obj.selframe(8);
+  end;
+  
+  if (obj.State=3)
+    obj.setframes(0);
+    obj.selframe(9);
+  end;
+  
+  if (obj.State=10)
+    obj.setframes(0, 7);
+    obj.selframe(1);
+  end;
+  
+  if (obj.State=11)
+    obj.setframes(0, 7);
+    obj.selframe(3);
+  end;
+  
+  if (obj.State=-1)
+    obj.setframes(0);
+    obj.selframe(4);
+  end;
+  
+  if (obj.State=-2)
+    obj.setframes(0, 6);
+    obj.selframe(4);
+  end;
+  
+  if (obj.State=-3)
+    obj.setframes(0);
+    obj.selframe(2);
+  end;
+  
+  if (obj.State=20)
+    obj.setframes(5,0);
+    obj.selframe(1);
+  end;
+  
+  if (obj.State=21)
+    obj.setframes(5,0);
+    obj.selframe(3);
+  end;
+  
+  if (obj.State=22)
+    obj.setframes(5,0);
+    obj.selframe(8);
+  end;
+  
+  if (obj.State=23)
+    obj.setframes(5,0);
+    obj.selframe(9);
+  end;
+  
+  if (obj.State=30)
+    obj.setframes(5, 0, 7);
+    obj.selframe(1);
+  end;
+  
+  if (obj.State=31)
+    obj.setframes(5, 0, 7);
+    obj.selframe(3);
+  end;
+  
+  if (obj.State=32)
+    obj.setframes(5, 0, 7);
+    obj.selframe(8);
+  end;
+  
+  if (obj.State=33)
+    obj.setframes(5, 0, 7);
+    obj.selframe(9);
+  end;
+  
+  if (obj.State=-12)
+    obj.setframes(5, 0, 6);
+    obj.selframe(4);
+  end;
+  
+  if (obj.State=-13)
+    obj.setframes(5, 0);
+    obj.selframe(2);
+  end;
+  
+endf;
+
+function extern DrawIOLinkDrValve(self);
+  if (self.State=0)
+    self.setframes(0);
+    self.selframe(1);
+  end;
+  
+  if (self.State=1)
+    self.setframes(0);
+    self.selframe(3);
+  end;
+  
+  if (self.State=2)
+    self.setframes(0);
+    self.selframe(8);
+  end;
+  
+  if (self.State=3)
+    self.setframes(0);
+    self.selframe(9);
+  end;
+  
+  if (self.State=10)
+    self.setframes(0, 7);
+    self.selframe(1);
+  end;
+  
+  if (self.State=11)
+    self.setframes(0, 7);
+    self.selframe(3);
+  end;
+  
+  if (self.State=-1)
+    self.setframes(0);
+    self.selframe(4);
+  end;
+  
+  if (self.State=-2)
+    self.setframes(0, 6);
+    self.selframe(4);
+  end;
+  
+  if (self.State=-3)
+    self.setframes(0);
+    self.selframe(2);
+  end;
+  
+  if (self.State=20)
+    self.setframes(5,0);
+    self.selframe(1);
+  end;
+  
+  if (self.State=21)
+    self.setframes(5,0);
+    self.selframe(3);
+  end;
+  
+  if (self.State=22)
+    self.setframes(5,0);
+    self.selframe(8);
+  end;
+  
+  if (self.State=23)
+    self.setframes(5,0);
+    self.selframe(9);
+  end;
+  
+  if (self.State=30)
+    self.setframes(5, 0, 7);
+    self.selframe(1);
+  end;
+  
+  if (self.State=31)
+    self.setframes(5, 0, 7);
+    self.selframe(3);
+  end;
+  
+  if (self.State=32)
+    self.setframes(5, 0, 7);
+    self.selframe(8);
+  end;
+  
+  if (self.State=33)
+    self.setframes(5, 0, 7);
+    self.selframe(9);
+  end;
+  
+  if (self.State=-12)
+    self.setframes(5, 0, 6);
+    self.selframe(4);
+  end;
+  
+  if (self.State=-13)
+    self.setframes(5, 0);
+    self.selframe(2);
+  end;
+  
+endf;
+
+function extern DrawIOLinkVtugValve(self);
+  if (self.State=0)
+    self.setframes(0);
+    self.selframe(1);
+  end;
+  
+  if (self.State=1)
+    self.setframes(0);
+    self.selframe(3);
+  end;
+  
+  if (self.State=2)
+    self.setframes(0);
+    self.selframe(8);
+  end;
+  
+  if (self.State=3)
+    self.setframes(0);
+    self.selframe(9);
+  end;
+  
+  if (self.State=10)
+    self.setframes(0, 7);
+    self.selframe(1);
+  end;
+  
+  if (self.State=11)
+    self.setframes(0, 7);
+    self.selframe(3);
+  end;
+  
+  if (self.State=-1)
+    self.setframes(0);
+    self.selframe(4);
+  end;
+  
+  if (self.State=-2)
+    self.setframes(0, 6);
+    self.selframe(4);
+  end;
+  
+  if (self.State=-3)
+    self.setframes(0);
+    self.selframe(2);
+  end;
+  
+  if (self.State=20)
+    self.setframes(5,0);
+    self.selframe(1);
+  end;
+  
+  if (self.State=21)
+    self.setframes(5,0);
+    self.selframe(3);
+  end;
+  
+  if (self.State=22)
+    self.setframes(5,0);
+    self.selframe(8);
+  end;
+  
+  if (self.State=23)
+    self.setframes(5,0);
+    self.selframe(9);
+  end;
+  
+  if (self.State=30)
+    self.setframes(5, 0, 7);
+    self.selframe(1);
+  end;
+  
+  if (self.State=31)
+    self.setframes(5, 0, 7);
+    self.selframe(3);
+  end;
+  
+  if (self.State=32)
+    self.setframes(5, 0, 7);
+    self.selframe(8);
+  end;
+  
+  if (self.State=33)
+    self.setframes(5, 0, 7);
+    self.selframe(9);
+  end;
+  
+  if (self.State=-12)
+    self.setframes(5, 0, 6);
+    self.selframe(4);
+  end;
+  
+  if (self.State=-13)
+    self.setframes(5, 0);
+    self.selframe(2);
+  end;
+  
+endf;
+function extern KlapanClick(valve);
+  local i;
+  i := ShowMenu('Включить клапан','Выключить клапан', 'Опции');
+  if (i = 0) if (MESSAGEDLG('Включить клапан ' + valve.Name + '?')=1) valve.State := 1; end; end;
+  if (i = 1) if (MESSAGEDLG('Выключить клапан ' + valve.Name + '?')=1) valve.State := 0; end; end;
+  if (i = 2) valve.ShowDeviceInspector(); end;
+endf;
+function extern KlapanClick1(valve);
+  local i;
+  i := ShowMenu('Включить клапан','Выключить клапан', 'Опции');
+  if (i = 0) if (MESSAGEDLG('Включить клапан ' + valve.Name + '?')=1) valve.State := 1; end; end;
+  if (i = 1) if (MESSAGEDLG('Выключить клапан ' + valve.Name + '?')=1) valve.State := 0; end; end;
+  if (i = 2) valve.ShowDeviceInspector(); end;
+endf;
+function extern KlapanClickNO(self);
+  local i;
+  // if (SYSTEM.manual = 0)
+  // qout('Для управления устройствами необходимо включить режим ручного управления!!!');
+  // else
+  i := ShowMenu('Закрыть клапан','Открыть клапан', 'Опции');
+  if (i = 0) if (MESSAGEDLG('Закрыть клапан ' + self.Name + '?')=1) self.State := 1; end; end;
+  if (i = 1) if (MESSAGEDLG('Открыть клапан ' + self.Name + '?')=1) self.State := 0; end; end;
+  if (i = 2) self.ShowDeviceInspector(); end;
+  //end;
+  
+endf;
+function extern KrestClick(self);
+  local i;
+  i := ShowMenu('Открыть клапан', 'Открыть верхнее седло', 'Открыть нижнее седло', 'Закрыть', 'Опции');
+  if (i = 0) if (MESSAGEDLG('Открыть клапан ' + self.Name + '?')=1) self.STATE := 1; end; end;
+  if (i = 1) if (MESSAGEDLG('Открыть верхнее седло клапана ' + self.Name + '?')=1) self.STATE := 2; end; end;
+  if (i = 2) if (MESSAGEDLG('Открыть нижнее седло клапана ' + self.Name + '?')=1) self.STATE := 3; end; end;
+  if (i = 3) if (MESSAGEDLG('Закрыть ' + self.Name + '?')=1) self.STATE := 0; end; end;
+  if (i = 4) self.ShowDeviceInspector(); end;
+endf;
+function extern KrestClickV(self);
+  local i;
+  i := ShowMenu('Открыть клапан', 'Открыть верхнее седло', 'Открыть нижнее седло', 'Закрыть', 'Опции');
+  if (i = 0) if (MESSAGEDLG('Открыть клапан ' + self.Name + '?')=1) self.ST := 1; end; end;
+  if (i = 1) if (MESSAGEDLG('Открыть верхнее седло клапана ' + self.Name + '?')=1) self.ST := 2; end; end;
+  if (i = 2) if (MESSAGEDLG('Открыть нижнее седло клапана ' + self.Name + '?')=1) self.ST := 3; end; end;
+  if (i = 3) if (MESSAGEDLG('Закрыть ' + self.Name + '?')=1) self.ST := 0; end; end;
+  if (i = 4) self.ShowDeviceInspector(); end;
+endf;
+
+function extern NasosClick(nasos);
+  local i;
+  // if (grebenka.manual = 0)
+  //  qout('Для управления устройствами необходимо включить режим ручного управления!!!');
+  
+  //else
+  i := ShowMenu('Включить насос', 'Выключить насос', 'Опции');
+  if (i = 0) if (MESSAGEDLG('Включить насос ' + nasos.Name + '?')=1) nasos.State := 1; end; end;
+  if (i = 1) if (MESSAGEDLG('Выключить насос ' + nasos.Name + '?')=1) nasos.State := 0; end; end;
+  if (i = 2) nasos.ShowDeviceInspector(); end;
+  
+  // end;
+endf;
+
+
+function extern MeshalkaClick(Mesh);
+  local i;
+  //if (grebenka.manual = 0)
+  //  qout('Для управления устройствами необходимо включить режим ручного управления!!!');
+  
+  //else
+  i := ShowMenu('Включить мешалку', 'Выключить мешалку', 'Включить реверс мешалки','Опции');
+  
+  if (i = 0) if (MESSAGEDLG('Включить мешалку ' + Mesh.Name + '?')=1) Mesh.St := 1; end; end;
+  if (i = 1) if (MESSAGEDLG('Выключить мешалку ' + Mesh.Name + '?')=1) Mesh.St := 0; end; end;
+  if (i = 2) if (MESSAGEDLG('Включить реверс мешалки ' + Mesh.Name + '?')=1) Mesh.St := 2; end; end;
+  //if (i = 3) if (MESSAGEDLG('Выключить реверс мешалки ' + Mesh.Name + '?')=1) Mesh.St := 0; end; end;
+  if (i = 3) Mesh.ShowDeviceInspector(); end;
+  
+  //end;
+endf;
+
+function extern MeshalkaClickNO(Mesh);
+  local i;
+  i := ShowMenu('Включить мешалку', 'Выключить мешалку', 'Опции');
+  
+  if (i = 0) if (MESSAGEDLG('Включить мешалку ' + Mesh.Name + '?')=1) Mesh.St := 1; end; end;
+  if (i = 1) if (MESSAGEDLG('Выключить мешалку ' + Mesh.Name + '?')=1) Mesh.St := 0; end; end;
+  if (i = 2) Mesh.ShowDeviceInspector(); end;
+  
+endf;
+function extern MeshalkaClickNO1(Mesh);
+  local i;
+  i := ShowMenu('Включить ', 'Выключить ', 'Опции');
+  
+  if (i = 0) if (MESSAGEDLG('Включить  ' + Mesh.Name + '?')=1) Mesh.St := 1; end; end;
+  if (i = 1) if (MESSAGEDLG('Выключить  ' + Mesh.Name + '?')=1) Mesh.St := 0; end; end;
+  if (i = 2) Mesh.ShowDeviceInspector(); end;
+  
+endf;
+function extern OSClick(OS);//test opcii
+  local i;
+  i := ShowMenu('Включить ', 'Выключить ', 'Опции');
+  
+  if (i = 0) if (MESSAGEDLG('Включить ' + OS.Name + '?')=1) OS.St := 1; end; end;
+  if (i = 1) if (MESSAGEDLG('Выключить ' + OS.Name + '?')=1) OS.St := 0; end; end;
+  if (i = 2) OS.ShowDeviceInspector(); end;
+  
+endf;
+
+function extern HandAutoClick(obj);
+  local i;
+  if (obj.S_PAR_F9 = 0)
+    if (MESSAGEDLG('Установить ручной режим управления?')=1) obj.S_PAR_F9 := 1; end;
+  else
+    if (MESSAGEDLG('Установить автоматический режим управления?')=1) obj.S_PAR_F9 := 0; end;
+  end;
+  
+endf;
+
+function extern HandAutoClickOut(obj);
+  local i;
+  
+  if (obj.S_PAR_F5 = 0)
+    if (MESSAGEDLG('Установить ручной режим управления линии выдачи?')=1) obj.S_PAR_F5 := 1; end;
+  else
+    if (MESSAGEDLG('Установить автоматический режим управления линии выдачи?')=1) obj.S_PAR_F5 := 0; end;
+  end;
+  
+endf;
+
+function extern HandAutoClickOutFB(obj);
+  local i;
+  
+  if (obj.S_PAR_F5 = 0)
+    if (MESSAGEDLG('Установить ручной режим управления линии выдачи?')=1) obj.S_PAR_F5 := 1; end;
+  else
+    if (MESSAGEDLG('Установить автоматический режим управления линии выдачи?')=1) obj.S_PAR_F5 := 0; end;
+  end;
+  
+endf;
+function extern HandAutoClickTank(obj);
+  local i;
+  if (obj.S_PAR_F6 = 0)
+    if (MESSAGEDLG('Установить ручной режим управления для танка?')=1) obj.S_PAR_F6 := 1; end;
+  else
+    if (MESSAGEDLG('Установить автоматический режим управления для танка?')=1) obj.S_PAR_F6 := 0; end;
+  end;
+endf;
+
+function extern HandAutoClickOt(obj);
+  local i;
+  if (obj.S_PAR_F6 = 0)
+    if (MESSAGEDLG('Установить ручной режим управления линии выдачи?')=1) obj.S_PAR_F6 := 1; end;
+  else
+    if (MESSAGEDLG('Установить автоматический режим управления линии выдачи?')=1) obj.S_PAR_F6 := 0; end;
+  end;
+endf;
+
+function extern HandAutoClickWT(obj);
+  local i;
+  if (obj.S_PAR_F3 = 0)
+    if (MESSAGEDLG('Установить ручной режим управления линии выдачи?')=1) obj.S_PAR_F3 := 1; end;
+  else
+    if (MESSAGEDLG('Установить автоматический режим управления линии выдачи?')=1) obj.S_PAR_F3 := 0; end;
+  end;
+endf;
+
+function extern PidManualMode(obj);  //включение ручного режима для пид-регуллятора
+  
+  if ( obj.S_PAR_F8 = 0 )
+    if ( MESSAGEDLG( 'Включить ручной режим?' ) = 1 )
+      obj.S_PAR_F8 := 1;
+    end;
+  else
+    if ( MESSAGEDLG( 'Выключить ручной режим?' ) = 1 )
+      obj.S_PAR_F8 := 0;
+    end;
+  end;
+endf;
+
+function extern TrendF(obj);  //Состояние возвратного клапана V21 (stairs).
+  // Должно отображаться так: если клапан находится в состоянии выключенном и приходит сигнал обратной связи (state 0),
+  //то на графике должна рисоваться прямая на значении параметра
+  //№28 Объекта ПОУ "Температура срабатывания возвратного клапана TE21" (LOW_TEMP_LIMIT_PRODUCTION), в противном случае - нуль.
+  if ( obj.Heater1V = 0 )
+    obj.F28 := obj.S_PAR_F28*1;
+  else
+    obj.F28 := 0;
+  end;
+endf;
+function extern LightClick(self); //для освещения
+  local i;
+  i := ShowMenu('Включить освещение', 'Выключить освещение', 'Опции');
+  if (i = 0) if (MESSAGEDLG('Включить освещение ' + self.Name + '?')=1) self.ST := 1; end; end;
+  if (i = 1) if (MESSAGEDLG('Выключить освещение ' + self.Name + '?')=1) self.ST := 0; end; end;
+  if (i = 2) self.ShowDeviceInspector(); end;
+  // end;
+endf;
+
+function extern SvetClickTank(obj); //кнопка свеи на карте коагулятора
+  local i;
+  if (obj.svet = 0)
+    obj.svet := 1;// end;
+  else
+    obj.svet := 0;// end;
+  end;
+endf;
+
+function extern GSClick(obj);  //для всех устройств опции
+  local i;
+  i := ShowMenu('Опции');
+  if (i = 0)
+    obj.ShowDeviceInspector();  end;
+endf;
+function extern GetIOColor(Pressed,RW);
+  local clr;
+  if (Pressed)
+    clr := 1;
+  else
+    clr := 7;
+    if (RW = 1)
+      clr := 11;
+    end;
+  end;
+  return(clr);
+endf;
+
+
+function extern WaterClick(obj);  //продукт-вода на линии
+  //if (obj.priority=5)
+  local i;
+  i := ShowMenu('Продукт', 'Вода');
+  if (i = 0)
+    if (MESSAGEDLG('Установить флаг наличия продукта в линии ' + obj.Name + '?')=1)
+      obj.ST := 0;
+    end;
+  end;
+  if (i = 1)
+    if (MESSAGEDLG('Установить флаг наличия воды в линии ' + obj.Name + '?')=1)
+      obj.ST := 1;
+    end;
+  end;
+  //else
+  //qout('Нет доступа к изменению данного параметра!');
+  //end;
+endf;
+
+
+function extern CTRDrop(self); //счетчик
+  if (MESSAGEDLG('Сбросить счетчик ' + self.Name + '?')=1)
+    Self.V := 0;
+  end;
+endf;
+
+function extern DrawMesh(mesh);  //мешалка с реверсом
+  if (mesh.allocate='C')
+    
+    if (mesh.ST=1)
+      if (mesh.M = 1)
+        mesh.setframes(0,8);
+        mesh.selframe(2);
+      end;
+      if (mesh.M = 0)
+        mesh.setframes(0);
+        mesh.selframe(2);
+      end;
+    end;
+    
+    if (mesh.ST=2)
+      if (mesh.M = 1)
+        mesh.setframes(6,0,8);
+        mesh.selframe(2);
+      end;
+      if (mesh.M = 0)
+        mesh.setframes(0,6);
+        mesh.selframe(2);
+      end;
+    end;
+    
+    if (mesh.ST=-1)
+      mesh.setframes(0);
+      mesh.selframe(3);
+    end;
+    
+    if (mesh.ST=0)
+      if (mesh.M = 1)
+        mesh.setframes(0,8);
+        mesh.selframe(1);
+      end;
+      if (mesh.M = 0)
+        mesh.setframes(0);
+        mesh.selframe(1);
+      end;
+    end;
+    
+  end;
+endf;
+
+
+
+function extern StWork2(self);//для отображения старт, стоп, пауза для операций коагулятора
+  
+  if (self.allocate='C')
+    
+    if ((self.St=0) or (self.ST2=0) or (self.ST3=0) or (self.ST4=0))
+      self.selframe(1);
+    end;
+    
+    if ((self.St=1)  or (self.ST2=1) or (self.ST3=1) or (self.ST4=1))
+      self.selframe(2);
+    end;
+    
+    if ((self.St=2) or (self.ST2=2) or (self.ST3=2) or (self.ST4=2) )
+      self.selframe(3);
+    end;
+    
+    if ((self.St=3) or (self.ST2=3) or (self.ST3=3) or (self.ST4=3) )
+      self.selframe(4);
+    end;
+    
+    if ((self.St=4) or (self.ST2=4) or (self.ST3=4) or (self.ST4=4) )
+      self.selframe(5);
+    end;
+    
+    if ((self.St=5)or (self.ST2=5) or (self.ST3=5) or (self.ST4=5))
+      self.selframe(6);
+    end;
+    
+  end;
+endf;
+
+function extern StWork4(self);//для отображения старт, стоп, пауза для операций коагулятора
+  
+  if (self.allocate='C')
+    
+    if ((self.St=0) or (self.ST2=0) )
+      self.selframe(1);
+    end;
+    
+    if ((self.St=1)  or (self.ST2=1) )
+      self.selframe(2);
+    end;
+    
+    if ((self.St=2) or (self.ST2=2)  )
+      self.selframe(3);
+    end;
+    
+    if ((self.St=3) or (self.ST2=3) )
+      self.selframe(4);
+    end;
+    
+    if ((self.St=4) or (self.ST2=4) )
+      self.selframe(5);
+    end;
+    
+    if ((self.St=5)or (self.ST2=5) )
+      self.selframe(6);
+    end;
+    
+  end;
+endf;
+
+function extern StWork3(self);//для отображения старт, стоп, пауза для операций коагулятора
+  
+  if (self.allocate='C')
+    
+    if ((self.St=0) or (self.ST2=0) or (self.ST3=0) or (self.ST4=0) or (self.ST5=0) )
+      self.selframe(1);
+    end;
+    
+    if ((self.St=1)  or (self.ST2=1) or (self.ST3=1) or (self.ST4=1) or (self.ST5=1))
+      self.selframe(2);
+    end;
+    
+    if ((self.St=2) or (self.ST2=2) or (self.ST3=2) or (self.ST4=2) or (self.ST5=2) )
+      self.selframe(3);
+    end;
+    
+    if ((self.St=3) or (self.ST2=3) or (self.ST3=3) or (self.ST4=3) or (self.ST5=3))
+      self.selframe(4);
+    end;
+    
+    if ((self.St=4) or (self.ST2=4) or (self.ST3=4) or (self.ST4=4) or (self.ST5=4))
+      self.selframe(5);
+    end;
+    
+    if ((self.St=5)or (self.ST2=5) or (self.ST3=5) or (self.ST4=5) or (self.ST5=5))
+      self.selframe(6);
+    end;
+    
+  end;
+endf;
+
+function extern StWork(self);//для отображения старт, стоп, пауза для операций коагулятора
+  
+  if (self.allocate='C')
+    
+    if ((self.St=0) or (self.ST2=0) or (self.ST3=0) or (self.ST4=0) or (self.ST5=0) or (self.ST6=0) or (self.ST7=0) or (self.ST8=0) or (self.ST9=0) or (self.ST10=0))
+      self.selframe(1);
+    end;
+    
+    if ((self.St=1)  or (self.ST2=1) or (self.ST3=1) or (self.ST4=1) or (self.ST5=1) or (self.ST6=1) or (self.ST7=1) or (self.ST8=1) or (self.ST9=1) or (self.ST10=1))
+      self.selframe(2);
+    end;
+    
+    if ((self.St=2) or (self.ST2=2) or (self.ST3=2) or (self.ST4=2) or (self.ST5=2) or (self.ST6=2) or (self.ST7=2) or (self.ST8=2) or (self.ST9=2) or (self.ST10=2))
+      self.selframe(3);
+    end;
+    
+    if ((self.St=3) or (self.ST2=3) or (self.ST3=3) or (self.ST4=3) or (self.ST5=3) or (self.ST6=3) or (self.ST7=3) or (self.ST8=3)  or (self.ST9=3) or (self.ST10=3))
+      self.selframe(4);
+    end;
+    
+    if ((self.St=4) or (self.ST2=4) or (self.ST3=4) or (self.ST4=4) or (self.ST5=4) or (self.ST6=4) or (self.ST7=4) or (self.ST8=4)  or (self.ST9=4) or (self.ST10=4))
+      self.selframe(5);
+    end;
+    
+    if ((self.St=5)or (self.ST2=5) or (self.ST3=5) or (self.ST4=5) or (self.ST5=5) or (self.ST6=5) or (self.ST7=5) or (self.ST8=5)  or (self.ST9=5) or (self.ST10=5))
+      self.selframe(6);
+    end;
+    
+  end;
+endf;
+
+function extern StWork1(self);//для отображения старт, стоп, пауза для операций коагулятора
+  
+  if (self.allocate='C')
+    
+    if ((self.St=0) or (self.ST2=0))
+      self.selframe(1);
+    end;
+    
+    if ((self.St=1)  or (self.ST2=1))
+      self.selframe(2);
+    end;
+    
+    if ((self.St=2) or (self.ST2=2))
+      self.selframe(3);
+    end;
+    
+    if ((self.St=3) or (self.ST2=3) )
+      self.selframe(4);
+    end;
+    
+    if ((self.St=4) or (self.ST2=4))
+      self.selframe(5);
+    end;
+    
+    if ((self.St=5)or (self.ST2=5) )
+      self.selframe(6);
+    end;
+    
+  end;
+endf;
+
+function extern SetProd(obj);
+  local i, cmd, res;
+  cmd := '';
+  i := 1;
+  while ( i <= ProductCount )
+    cmd := cmd + ',"' + ProductType[0, i] + '"';
+    i := i + 1;
+  end;
+  cmd := cmd + ', "Сброс продукта"';
+  cmd := cmd[2];
+  cmd := 'ShowMenu(' + cmd + ')';
+  res := &&cmd;
+  if ( res <> -1)
+    if ( res = ProductCount )
+      obj.S_PAR_F3 := 0;
+    else
+      obj.S_PAR_F3 := res + 1;
+    end;
+  end;
+  
+endf;
+
+function extern SetFlowStepStr(obj); //коагуляторы
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )
+    if (obj.step1 = 1)
+      strm := strm+'1.Работа';
+    end;
+    if (obj.step1 = 2)
+      strm := strm+'2.Ожидание';
+    end;
+  end;
+  
+  obj.Step_Str := strm;
+endf;
+function extern SetPStepStr(obj); //коагуляторы
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )  //мойка
+    if (obj.step1 = 1)
+      strm := strm+'1.Основная зона';
+    end;
+    if (obj.step1 = 2)
+      strm := strm+'2.Вспомогательная'+ chr(13) +chr(10)+ 'зона';
+    end;
+    if (obj.step1 = 3)
+      strm := strm+'3.Зона технолог./'+ chr(13) +chr(10)+'охлажд.воды';
+    end;
+    if (obj.step1 = 4)
+      strm := strm+'4.Смена среды';
+    end;
+    if (obj.step1 = 5)
+      strm := strm+'5.Объект'+ chr(13) +chr(10)+'опорожнен';
+    end;
+    if (obj.step1 = 6)
+      strm := strm+'6.Дренаж';
+    end;
+  end;
+  if ( ( obj.ST and 2 ) = 2 )  //мойка
+    if (obj.step2 = 1)
+      strm := strm+'1.Работа';
+    end;
+    if (obj.step2 = 2)
+      strm := strm+'2.Опорожнение'+ chr(13) +chr(10)+ 'в дренаж';
+    end;
+  end;
+  
+  obj.Step_Str := strm;
+endf;
+
+function extern SetP4790StepStr(obj); //коагуляторы
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )  //мойка
+    if (obj.step1 = 1)
+      strm := strm+'1.Основная зона';
+    end;
+    if (obj.step1 = 2)
+      strm := strm+'2.Вспомогательная'+ chr(13) +chr(10)+ 'зона';
+    end;
+    if (obj.step1 = 3)
+      strm := strm+'3.Зона технолог./'+ chr(13) +chr(10)+'охлажд.воды';
+    end;
+    if (obj.step1 = 4)
+      strm := strm+'4.Смена среды';
+    end;
+    if (obj.step1 = 5)
+      strm := strm+'5.Объект'+ chr(13) +chr(10)+'опорожнен';
+    end;
+    if (obj.step1 = 6)
+      strm := strm+'6.Дренаж';
+    end;
+  end;
+  if ( ( obj.ST and 2 ) = 2 )  //мойка
+    if (obj.step2 = 1)
+      strm := strm+'1.Работа';
+    end;
+    {if (obj.step2 = 2)
+    strm := strm+'2.Откачка'+ chr(13) +chr(10)+ 'жирводы';
+    end;}
+  end;
+  
+  obj.Step_Str := strm;
+endf;
+
+function extern SetP85StepStr(obj); //коагуляторы
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )  //мойка
+    if (obj.step1 = 1)
+      strm := strm+'1.Основная зона';
+    end;
+    if (obj.step1 = 2)
+      strm := strm+'2.Вспомогательная'+ chr(13) +chr(10)+ 'зона';
+    end;
+    if (obj.step1 = 3)
+      strm := strm+'3.Зона технолог./'+ chr(13) +chr(10)+'охлажд.воды 1';
+    end;
+    if (obj.step1 = 4)
+      strm := strm+'4.Зона технолог./'+ chr(13) +chr(10)+'охлажд.воды 2';
+    end;
+    if (obj.step1 = 5)
+      strm := strm+'5.Смена среды';
+    end;
+    if (obj.step1 = 6)
+      strm := strm+'6.Объект'+ chr(13) +chr(10)+'опорожнен';
+    end;
+    if (obj.step1 = 7)
+      strm := strm+'7.Дренаж';
+    end;
+  end;
+  if ( ( obj.ST and 2 ) = 2 )  //мойка
+    if (obj.step2 = 1)
+      strm := strm+'1.Работа';
+    end;
+    if (obj.step2 = 2)
+      strm := strm+'2.Опорожнение'+ chr(13) +chr(10)+ 'в дренаж';
+    end;
+  end;
+  
+  obj.Step_Str := strm;
+endf;
+
+function extern SetPCoolStepStr(obj); //коагуляторы
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )  //мойка
+    if (obj.step1 = 1)
+      strm := strm+'1.Ожидание сигнала'+ chr(13) +chr(10)+ 'запроса работы';
+    end;
+    if (obj.step1 = 2)
+      strm := strm+'2.Работа';
+    end;
+    if (obj.step1 = 3)
+      strm := strm+'3.Ожидание';
+    end;
+  end;
+  
+  obj.Step_Str := strm;
+endf;
+
+function extern SetPHeatStepStr(obj); //коагуляторы
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )  //мойка
+    if (obj.step1 = 1)
+      strm := strm+'1.Ожидание сигнала'+ chr(13) +chr(10)+ 'запроса работы';
+    end;
+    if (obj.step1 = 2)
+      strm := strm+'2.Работа';
+    end;
+    if (obj.step1 = 3)
+      strm := strm+'3.Ожидание';
+    end;
+  end;
+  
+  obj.Step_Str := strm;
+endf;
+function extern SetLineInStepStr(obj); //линии наполнения
+  local strm;
+  strm := '';
+  //debug;
+  if ( ( obj.ST and 1 ) = 1 )
+    if (obj.step1 = 1)
+      strm := '1.Мойка';
+    end;
+    if (obj.step1 = 2)
+      strm := '2.Промывка седел';
+    end;
+    if (obj.step1 = 3)
+      strm := '3.Промывка дренажа';
+    end;
+    if (obj.step1 = 4)
+      strm := '4.Дренаж';
+    end;
+  end;
+  if ( ( obj.ST and 2 ) = 2 )
+    
+    if (obj.step2 = 1)
+      strm := '1.Ожидание';
+    end;
+    if (obj.step2 = 2)
+      strm := '2.В линию вытеснения ' +chr(13) + chr(10)+ '(В дренаж)';
+    end;
+    
+    if (obj.nmr=1)
+      if (obj.step2 = 3)
+        strm := '3.В танк 1';
+      end;
+    else
+      if (obj.step2 = 3)
+        strm := '3.В линию' +chr(13) + chr(10)+ 'BERTSCH';
+      end;
+    end;
+    
+    if (obj.step2 = 4)
+      strm := '4.В танк 2';
+    end;
+    if (obj.step2 = 5)
+      strm := '5.В танк 3';
+    end;
+    if (obj.step2 = 6)
+      strm := '6.В танк 4';
+    end;
+    if (obj.step2 = 7)
+      strm := '7.В танк 5';
+    end;
+    if (obj.step2 = 8)
+      strm := '8.Запрос проталкивания';
+    end;
+  end;
+  obj.Step_Str := strm;
+endf;
+
+function extern SetLineInWTStepStr(obj);
+  local strm;
+  strm := '';
+  //debug;
+  if ( ( obj.ST and 1 ) = 1 )
+    if (obj.step1 = 1)
+      strm := '1.Мойка линии';
+    end;
+    if (obj.step1 = 2)
+      strm := '2.Промывка седел';
+    end;
+    if (obj.step1 = 3)
+      strm := '3.Снятие давления';
+    end;
+    if (obj.step1 = 4)
+      strm := '4.Промывка дренажа';
+    end;
+    if (obj.step1 = 5)
+      strm := '5.Промывка дренажа-завершение';
+    end;
+    if (obj.step1 = 6)
+      strm := '6.Дренаж';
+    end;
+  end;
+  if ( ( obj.ST and 2 ) = 2 )
+    if (obj.step2 = 1)
+      strm := '1.Ожидание';
+    end;
+    if (obj.step2 = 2)
+      strm := '2.В дренаж';
+    end;
+    if (obj.step2 = 3)
+      strm := '3.В танк 1';
+    end;
+    if (obj.step2 = 4)
+      strm := '4.В танк 2';
+    end;
+    if (obj.step2 = 5)
+      strm := '5.В танк 3';
+    end;
+    if (obj.step2 = 6)
+      strm := '6.Проталкивание';
+    end;
+    if (obj.step2 = 7)
+      strm := '7.Циркуляция';
+    end;
+  end;
+  obj.Step_Str := strm;
+endf;
+
+function extern SetLineInStepStrB(obj); //линии наполнения  O7-O8 (Bertsch)
+  local strm;
+  strm := '';
+  
+  if ( ( obj.ST and 1 ) = 1 )
+    if (obj.step1 = 1)
+      strm := '1.Мойка';
+    end;
+    if (obj.step1 = 2)
+      strm := '2.Промывка седел';
+    end;
+    if (obj.step1 = 3)
+      strm := '3.Промывка дренажа';
+    end;
+    if (obj.step1 = 4)
+      strm := '4.Дренаж';
+    end;
+  end;
+  if ( ( obj.ST and 2 ) = 2 )
+    if (obj.step2 = 1)
+      strm := '1.Ожидание';
+    end;
+    if (obj.step2 = 2)
+      strm := '2.В дренаж';
+    end;
+    if (obj.step2 = 3)
+      strm := '3.В Линию' +chr(13) + chr(10)+ 'BERTSCH';
+    end;
+    if (obj.step2 = 4)
+      strm := '4.В танк 2';
+    end;
+    if (obj.step2 = 5)
+      strm := '5.В танк 3';
+    end;
+    if (obj.step2 = 6)
+      strm := '6.В танк 4';
+    end;
+    if (obj.step2 = 7)
+      strm := '7.В танк 5';
+    end;
+    if (obj.step2 = 8)
+      strm := '8.Запрос проталкивания';
+    end;
+  end;
+  obj.Step_Str := strm;
+endf;
+function extern SetKoagStepStr(obj); //коагуляторы
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )  //мойка
+    if (obj.step1 = 1)
+      strm := strm+'1.В танк';
+    end;
+    if (obj.step1 = 2)
+      strm := strm+'2.Флипование';
+    end;
+    if (obj.step1 = 3)
+      strm := strm+'3.Дренаж';
+    end;
+  end;
+  
+  obj.Step_Str := strm;
+endf;
+
+function extern SetWTStepStr(obj); //коагуляторы
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )  //мойка
+    if (obj.step1 = 1)
+      strm := strm+'1.На МГ';
+    end;
+    if (obj.step1 = 2)
+      strm := strm+'2.Флипование под давлением';
+    end;
+    if (obj.step1 = 3)
+      strm := strm+'3.Смена среды';
+    end;
+    if (obj.step1 = 4)
+      strm := strm+'4.Объект опорожнен';
+    end;
+    if (obj.step1 = 5)
+      strm := strm+'5.Дренаж';
+    end;
+  end;
+  obj.Step_Str := strm;
+endf;
+
+
+function extern SetLAStepStr(obj); //танк лим кислоты
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )  //мойка
+    if (obj.step1 = 1)
+      strm := strm+'1.В танк';
+    end;
+    if (obj.step1 = 2)
+      strm := strm+'2.Флипование';
+    end;
+    if (obj.step1 = 3)
+      strm := strm+'3.Дренаж';
+    end;
+  end;
+  if ( ( obj.ST and 8 ) = 8 )
+    if (obj.step4 = 1)
+      strm := strm+'1.Выдача в О7';
+    end;
+    if (obj.step4 = 2)
+      strm := strm+'2.Выдача в О8';
+    end;
+  end;
+  
+  obj.Step_Str := strm;
+endf;
+
+function extern SetBrineStepStr(obj); //коагуляторы
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )  //мойка
+    if (obj.step1 = 1)
+      strm := strm+'1.На МГ';
+    end;
+    if (obj.step1 = 2)
+      strm := strm+'2.Линия наполнения';
+    end;
+    if (obj.step1 = 3)
+      strm := strm+'3.Линия возврата';
+    end;
+    if (obj.step1 = 4)
+      strm := strm+'4.Смена среды';
+    end;
+    if (obj.step1 = 5)
+      strm := strm+'5.Объект опорожнен';
+    end;
+    if (obj.step1 = 6)
+      strm := strm+'6.Дренаж';
+    end;
+  end;
+  
+  if ( ( obj.ST and 2 ) = 2 )  //мойка
+    if (obj.step2 = 1)
+      strm := strm+'1.Заполнение л.циркуляции';
+    end;
+    if (obj.step2 = 2)
+      strm := strm+'2.Ожидание появления уровня';
+    end;
+    if (obj.step2 = 3)
+      strm := strm+'3.Откачка до НУ';
+    end;
+    if (obj.step2 = 4)
+      strm := strm+'4.Появление ВУ';
+    end;
+    if (obj.step2 = 5)
+      strm := strm+'5.Полное опустошение';
+      obj.step2_4:=1;
+    else
+      obj.step2_4:=0;
+    end;
+  end;
+  
+  if ( ( obj.ST and 4 ) = 4 )  //
+    if (obj.step3 = 1)
+      strm := strm+'1.Ожидание появления уровня' + chr(13) + chr(10);
+    end;
+    if (obj.step3 = 2)
+      strm := strm+'2.Откачка до НУ' + chr(13) + chr(10);
+    end;
+    if (obj.step3 = 3)
+      strm := strm+'3.Появление ВУ' + chr(13) + chr(10);
+    end;
+    if (obj.step3_4 = 1)
+      strm := strm + '4.Циркуляция через MF2' + chr(13) + chr(10);
+    end;
+    if (obj.step3_5 = 1)
+      strm := strm + '5.Завершение подачи на MF2' + chr(13) + chr(10);
+    end;
+    if (obj.step3_6 = 1)
+      strm := strm + '6.Завершение выдачи из MF2' + chr(13) + chr(10);
+    end;
+  end;
+  
+  if ( ( obj.ST and 8 ) = 8 )  //мойка
+    if (obj.step4 = 1)
+      strm := strm+'1.Откачка в 4885';
+    end;
+    if (obj.step4 = 2)
+      strm := strm+'2.Откачка из 4885';
+    end;
+    if (obj.step4 = 3)
+      strm := strm+'3.Проталкивание л.циркуляции';
+    end;
+  end;
+  
+  obj.Step_Str := strm;
+endf;
+
+function extern SetLAMixStepStr(obj); //узлы перемешивания
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )
+    if (obj.step1 = 1)
+      strm := '1.Работа' +chr(13) + chr(10)+ 'мешалки';
+    end;
+    if (obj.step1 = 2)
+      strm := '2.Простой' +chr(13) + chr(10)+ 'мешалки';
+    end;
+  end;
+  obj.Step_Str := strm;
+endf;
+
+function extern SetCoagHeatStepStr(obj); //коагуляторы
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )  //мойка
+    if (obj.step1 = 1)
+      strm := strm+'1.Ожидание сигнала'+ chr(13) +chr(10)+ 'запроса работы';
+    end;
+    if (obj.step1 = 2)
+      strm := strm+'2.Работа';
+    end;
+    if (obj.step1 = 3)
+      strm := strm+'3.Ожидание';
+    end;
+  end;
+  
+  obj.Step_Str := strm;
+endf;
+
+function extern SetBunkerStepStr(obj); //коагуляторы
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )  //мойка
+    if (obj.step1 = 1)
+      strm := strm+'1.Мойка pfm+'+ chr(13) +chr(10)+ 'л.циркуляции';
+    end;
+    if (obj.step1 = 2)
+      strm := strm+'2.Мойка pfm';
+    end;
+    if (obj.step1 = 3)
+      strm := strm+'3.Промывка'+ chr(13) +chr(10)+ 'трубы 4875';
+    end;
+    if (obj.step1 = 4)
+      strm := strm+'4.Смена'+ chr(13) +chr(10)+ ' среды';
+    end;
+    if (obj.step1 = 5)
+      strm := strm+'5.Объект '+ chr(13) +chr(10)+ 'опорожнен';
+    end;
+    if (obj.step1 = 6)
+      strm := strm+'6.Дренаж';
+    end;
+  end;
+  if ( ( obj.ST and 2 ) = 2 )  //мойка
+    if (obj.step2 = 1)
+      strm := strm+'1.Пополнение';
+    end;
+    if (obj.step2 = 2)
+      strm := strm+'2.Циркуляция';
+    end;
+  end;
+  obj.Step_Str := strm;
+endf;
+
+function extern SetWLStepStr(obj); //коагуляторы
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )  //мойка
+    if (obj.step1 = 1)
+      strm := strm+'1.Мойка';
+    end;
+    if (obj.step1 = 2)
+      strm := strm+'2.Дренаж';
+    end;
+  end;
+  obj.Step_Str := strm;
+endf;
+
+function extern SetFBrineStepStr(obj); //коагуляторы
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )  //мойка
+    if (obj.step1 = 1)
+      strm := strm+'1.Мойка танка';
+    end;
+    if (obj.step1 = 2)
+      strm := strm+'2.Флипование';
+    end;
+    if (obj.step1 = 3)
+      strm := strm+'3.Дренаж';
+    end;
+  end;
+  if ( ( obj.ST and 2 ) = 2 )  //мойка
+    if (obj.step2 = 1)
+      strm := strm+'1.Ожидание';
+    end;
+    if (obj.step2 = 2)
+      strm := strm+'2.Работа';
+    end;
+  end;
+  
+  obj.Step_Str := strm;
+endf;
+
+function extern SetFBrineCoolStepStr(obj); //коагуляторы
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )  //мойка
+    if (obj.step1 = 1)
+      strm := strm+'1.Работа';
+    end;
+    if (obj.step1 = 2)
+      strm := strm+'2.Ожидание';
+    end;
+  end;
+  
+  obj.Step_Str := strm;
+endf;
+
+function extern SetFBrineMixStepStr(obj); //узлы перемешивания
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )
+    if (obj.step1 = 1)
+      strm := '1.Работа' +chr(13) + chr(10)+ 'мешалки';
+    end;
+    if (obj.step1 = 2)
+      strm := '2.Простой' +chr(13) + chr(10)+ 'мешалки';
+    end;
+  end;
+  obj.Step_Str := strm;
+endf;
+function extern SetLineOutStepStr(obj);
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )
+    if (obj.step1 = 1)
+      strm := strm+'1.Мойка линии';
+    end;
+    if (obj.step1 = 2)
+      strm := strm+'2.Завершение'+chr(13) + chr(10)+ 'мойки';
+    end;
+  end;
+  if ( ( obj.ST and 2 ) = 2 )
+    if (obj.step2 = 1)
+      strm := '1.Ожидание';
+    end;
+    if (obj.step2 = 2)
+      strm := '2.Проталкивание';
+    end;
+    if (obj.step2 = 3)
+      strm := '3. Из танка 1';
+    end;
+  end;
+  obj.Step_Str := strm;
+endf;
+
+function extern SetLineOutWTStepStr(obj);
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )
+    if (obj.step1 = 1)
+      strm := strm+'1.Мойка линии';
+    end;
+    if (obj.step1 = 2)
+      strm := strm+'2.Промывка седел';
+    end;
+    if (obj.step1 = 3)
+      strm := strm+'3.Дренаж';
+    end;
+  end;
+  if ( ( obj.ST and 2 ) = 2 )
+    if (obj.step2 = 1)
+      strm := '1.Ожидание';
+    end;
+    if (obj.step2 = 2)
+      strm := '2.Проталкивание';
+    end;
+    if (obj.step2 = 3)
+      strm := '3. Из танка 1';
+    end;
+    if (obj.step2 = 4)
+      strm := '4. Из танка 2';
+    end;
+    if (obj.step2 = 5)
+      strm := '5. Из танка 3';
+    end;
+    if (obj.step2 = 6)
+      strm := '6. Циркуляция';
+    end;
+  end;
+  obj.Step_Str := strm;
+endf;
+
+function extern SetPressStepStr(obj);
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )
+    if (obj.step1 = 1)
+      strm := strm+'1.Мойка линии';
+    end;
+    if (obj.step1 = 2)
+      strm := strm+'2.Завершение'+chr(13) + chr(10)+ 'мойки';
+    end;
+  end;
+  obj.Step_Str := strm;
+endf;
+
+function extern SetFBrineLineInStepStr(obj); //линии наполнения
+  local strm;
+  strm := '';
+  
+  if ( ( obj.ST and 1 ) = 1 )
+    if (obj.step1 = 1)
+      strm := '1.Мойка линии';
+    end;
+    if (obj.step1 = 2)
+      strm := '2.Флипование';
+    end;
+    if (obj.step1 = 3)
+      strm := '3.Дренаж';
+    end;
+  end;
+  if ( ( obj.ST and 2 ) = 2 )
+    if (obj.step2 = 1)
+      strm := '1.В танк 1';
+    end;
+    if (obj.step2 = 2)
+      strm := '2.В танк 2';
+    end;
+  end;
+  obj.Step_Str := strm;
+endf;
+function extern SetBLineInStepStr(obj); //линии наполнения
+  local strm;
+  strm := '';
+  
+  if ( ( obj.ST and 1 ) = 1 )
+    if (obj.step1 = 1)
+      strm := '1.Мойка линии';
+    end;
+    if (obj.step1 = 2)
+      strm := '2.Промывка седел';
+    end;
+    if (obj.step1 = 3)
+      strm := '3.Промывка дренажа';
+    end;
+    if (obj.step1 = 4)
+      strm := '4.Дренаж';
+    end;
+  end;
+  if ( ( obj.ST and 2 ) = 2 )
+    if (obj.step2 = 1)
+      strm := '1.Ожидание';
+    end;
+    if (obj.step2 = 2)
+      strm := '2.В дренаж';
+    end;
+    if (obj.step2 = 3)
+      strm := '3.В танк 1';
+    end;
+    if (obj.step2 = 4)
+      strm := '4.В танк 2';
+    end;
+  end;
+  obj.Step_Str := strm;
+endf;
+function extern SetFBrineLineOutStepStr(obj);
+  local strm;
+  strm := '';
+  if ( ( obj.ST and 1 ) = 1 )
+    if (obj.step1 = 1)
+      strm := strm+'1.Мойка линии';
+    end;
+    if (obj.step1 = 2)
+      strm := strm+'2.Флипование';
+    end;
+    if (obj.step1 = 3)
+      strm := strm+'3.Дренаж';
+    end;
+  end;
+  if ( ( obj.ST and 2 ) = 2 )
+    if (obj.step2 = 1)
+      strm := '1.Ожидание';
+    end;
+    if (obj.step2 = 2)
+      strm := '2.Из танка 1';
+    end;
+    if (obj.step2 = 3)
+      strm := '3. Из танка 2';
+    end;
+  end;
+  obj.Step_Str := strm;
+endf;
+{ function extern SetMixStepStr(obj); //узлы перемешивания
+local strm;
+strm := '';
+if ( ( obj.ST and 1 ) = 1 )
+  if (obj.step1 = 1)
+    strm := '1.Работа' +chr(13) + chr(10)+ 'мешалки';
+  end;
+  if (obj.step1 = 2)
+    strm := '2.Простой' +chr(13) + chr(10)+ 'мешалки';
+  end;
+end;
+if ( ( obj.ST and 2 ) = 2 )
+  if (obj.step2 = 1)
+    strm := '1.Работа' +chr(13) + chr(10)+ 'мешалки';
+  end;
+  if (obj.step2 = 2)
+    strm := '2.Простой' +chr(13) + chr(10)+ 'мешалки';
+  end;
+end;
+obj.Step_Str := strm;
+endf;}
+function extern SetNumericPart(Obj);   //для изменения номера партии на карте сыроизготовителя
+  local k, par, spar;
+  par := &&(obj.name+'.S_PAR_F7');
+  if (par<10)
+    spar := str(par,1);
+  else
+    spar := str(par,2);
+  end;
+  if (MessageDLG('Номер партии = '+spar+', хотите изменить?')=1)
+    k := EditIK('Введите номер партии:', 0,1,1000000,0);
+    obj.S_PAR_F7 := k;
+  end;
+endf;
+
+function extern SetNumericPartWT(Obj);   //для изменения номера партии на карте сыроизготовителя
+  local k, par, spar;
+  par := &&(obj.name+'.S_PAR_F4');
+  if (par<10)
+    spar := str(par,1);
+  else
+    spar := str(par,2);
+  end;
+  if (MessageDLG('Номер партии = '+spar+', хотите изменить?')=1)
+    k := EditIK('Введите номер партии:', 0,1,1000000,0);
+    obj.S_PAR_F4 := k;
+  end;
+endf;
+
+function extern SetTable(tnkObj);    //сыроизготовитель и узел подогрева
+  tnkObj.R ('RModeTable').ClearJoinList;
+  tnkObj.R ('RModeHeatTable').ClearJoinList;
+  
+  local table, table1;
+  
+  table := tnkObj.R('RModeTable');
+  tnkObj.R('RModeTable').Visible := false;
+  
+  table1 := tnkObj.R('RModeHeatTable');
+  tnkObj.R('RModeHeatTable').Visible := false;
+  
+  table.ClearJoinList;
+  table1.ClearJoinList;
+  
+  local mix, cmd, num, tnk, cool, line, heat, master, pres;
+  num := Str(tnkObj.Nmr, 1);
+  
+  cmd := 'MasterObj';//master
+  master := &&cmd;
+  
+  cmd := 'CoagHeatingObj' + num;  //узел перемешивания
+  heat := &&cmd;
+  
+  cmd := 'CoagObj' + num;  //коагуляторы
+  tnk := &&cmd;
+  
+  cmd := 'PressObj' + num;  //коагуляторы
+  pres := &&cmd;
+  
+  if ( ( heat.ST and 1 ) = 1 )//ПОДОГРЕВ
+    heat.R(table1.name).JoinToProp(heat.name,'S_PAR_F3');
+    heat.R(table1.name).JoinToProp(heat.name,'S_PAR_F4');
+    heat.R(table1.name).JoinToProp(heat.name,'S_PAR_F5');
+  end;
+  
+  if ( ( pres.ST and 1 ) = 1 )//ПОДОГРЕВ
+    pres.R(table1.name).JoinToProp(pres.name,'S_PAR_F3');
+    pres.R(table1.name).JoinToProp(pres.name,'S_PAR_F4');
+    pres.R(table1.name).JoinToProp(pres.name,'S_PAR_F5');
+    pres.R(table1.name).JoinToProp(pres.name,'S_PAR_F6');
+  end;
+  
+  
+  if ( ( tnk.ST and 1 ) = 1 )//Мойка КОАГУЛЯТОРА
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F17');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F18');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F20');
+  end;
+  
+  if ( ( tnk.ST and 2 ) = 2 )//Наполнение   КОАГУЛЯТОРА
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F11');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F12');
+  end;
+  
+  
+  if (( ( tnk.ST and 4 ) > 0 ) or (tnk.ST = 0) or (( heat.ST and 1 ) > 0 ) or (heat.ST = 0) or (( pres.ST and 1 ) > 0 ) or (pres.ST = 0) ) // Сумма операций, для которых нужна таблица
+    tnkObj.R('RModeTable').Visible := true;
+    tnkObj.R('RModeHeatTable').Visible := true;
+  end;
+  
+endf;
+function extern SetTableLA(tnkObj);    //БАЧОК ЛИМОННОЙ КИСЛОТЫ
+  tnkObj.R ('RModeTableLA').ClearJoinList;
+  tnkObj.R ('RModeMixTable').ClearJoinList;
+  
+  local table, table1;
+  
+  table := tnkObj.R('RModeTableLA');
+  tnkObj.R('RModeTableLA').Visible := false;
+  
+  table1 := tnkObj.R('RModeMixTable');
+  tnkObj.R('RModeMixTable').Visible := false;
+  
+  table.ClearJoinList;
+  table1.ClearJoinList;
+  
+  local mix, cmd, num, tnk, cool, line, heat, master;
+  num := Str(tnkObj.Nmr, 1);
+  
+  cmd := 'MasterObj';//master
+  master := &&cmd;
+  
+  cmd := 'LAMixObj' + num;  //узел перемешивания
+  mix := &&cmd;
+  
+  cmd := 'LATankObj' + num;  //БАЧОК ЛИМОННОЙ КИСЛОТЫ
+  tnk := &&cmd;
+  
+  
+  if ( ( mix.ST and 1 ) = 1 )//Перемешивание
+    mix.R(table1.name).JoinToProp(mix.name,'S_PAR_F3');
+    mix.R(table1.name).JoinToProp(mix.name,'S_PAR_F4');
+    mix.R(table1.name).JoinToProp(mix.name,'S_PAR_F5');
+    mix.R(table1.name).JoinToProp(mix.name,'S_PAR_F6');
+    mix.R(table1.name).JoinToProp(mix.name,'S_PAR_F7');
+    mix.R(table1.name).JoinToProp(mix.name,'S_PAR_F8');
+  end;
+  
+  
+  if ( ( tnk.ST and 1 ) = 1 )//Мойка
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F16');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F17');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F18');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F19');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F20');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F37');
+  end;
+  
+  if ( ( tnk.ST and 2 ) = 2 )//Наполнение
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F11');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F12');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F23');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F24');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F29');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F30');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F38');
+  end;
+  
+  if ( ( tnk.ST and 4 ) = 4 )//ХРАНЕНИЕ
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F23');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F24');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F31');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F32');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F39');
+  end;
+  
+  if ( ( tnk.ST and 8 ) = 8 )//ВЫДАЧА
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F23');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F24');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F33');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F34');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F40');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F43');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F44');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F47');
+  end;
+  
+  
+  if (( ( tnk.ST and 16 ) > 0 ) or (tnk.ST = 0) or (( mix.ST and 1 ) > 0 ) or (mix.ST = 0) ) // Сумма операций, для которых нужна таблица
+    tnkObj.R('RModeTableLA').Visible := true;
+    tnkObj.R('RModeMixTable').Visible := true;
+  end;
+  
+endf;
+
+function extern SetTableWT(tnkObj);
+  tnkObj.R ('RModeTableWT').ClearJoinList;
+  
+  local table, table1;
+  
+  table := tnkObj.R('RModeTableWT');
+  tnkObj.R('RModeTableWT').Visible := false;
+  
+  table.ClearJoinList;
+  
+  local mix, cmd, num, tnk, cool, line, heat, master;
+  num := Str(tnkObj.Nmr, 1);
+  
+  cmd := 'MasterObj';//master
+  master := &&cmd;
+  
+  cmd := 'TankObjWT' + num;
+  tnk := &&cmd;
+  
+  if ( ( tnk.ST and 1 ) = 1 )//Мойка
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F21');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F22');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F23');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F24');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F25');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F26');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F27');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F28');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F29');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F30');
+  end;
+  
+  if ( ( tnk.ST and 2 ) = 2 )//Наполнение
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F8');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F9');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F11');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F12');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F13');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F14');
+  end;
+  
+  if ( ( tnk.ST and 4 ) = 4 )//ХРАНЕНИЕ
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F8');
+  end;
+  
+  if ( ( tnk.ST and 8 ) = 8 )//ВЫДАЧА
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F8');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F10');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F15');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F55');
+  end;
+  
+  if ( ( tnk.ST and 16 ) = 16 )
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F14');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F15');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F55');
+  end;
+  
+  
+  if (( ( tnk.ST and 31 ) > 0 ) or (tnk.ST = 0)) // Сумма операций, для которых нужна таблица
+    tnkObj.R('RModeTableWT').Visible := true;
+  end;
+  
+endf;
+
+function extern SetTableB(tnkObj);    //Бункер
+  tnkObj.R ('RParPBun').ClearJoinList;
+  
+  local table, table1;
+  
+  table := tnkObj.R('RParPBun');
+  tnkObj.R('RParPBun').Visible := false;
+  
+  table.ClearJoinList;
+  //table1.ClearJoinList;
+  
+  local mix, cmd, num, tnk, cool, line, heat, master;
+  num := Str(tnkObj.Nmr, 1);
+  
+  cmd := 'MasterObj';//master
+  master := &&cmd;
+  
+  
+  cmd := 'BunkerObj1';  //БАЧОК
+  tnk := &&cmd;
+  
+  
+  if ( ( tnk.ST and 1 ) = 1 )//Мойка
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F17');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F18');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F19');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F20');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F21');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F22');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F23');
+    //tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F37');
+  end;
+  
+  if ( ( tnk.ST and 2 ) = 2 )//Наполнение
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F24');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F25');
+  end;
+  
+  if ( (( tnk.ST and 4 ) > 0 ) or (tnk.ST = 0)) // Сумма операций, для которых нужна таблица
+    tnkObj.R('RParPBun').Visible := true;
+  end;
+  
+endf;
+
+function extern SetTableBR(tnkObj);    //   ТАНК РАССОЛА 1
+  
+  tnkObj.R ('RModeTableBR').ClearJoinList;
+  
+  local table, table1;
+  
+  table := tnkObj.R('RModeTableBR');
+  tnkObj.R('RModeTableBR').Visible := false;
+  
+  table.ClearJoinList;
+  
+  local mix, cmd, num, tnk, cool, line, heat, master;
+  num := Str(tnkObj.Nmr, 1);
+  
+  cmd := 'MasterObj';//master
+  master := &&cmd;
+  
+  cmd := 'BrineTankObj' + num;
+  tnk := &&cmd;
+  
+  
+  if ( ( tnk.ST and 1 ) = 1 )//Мойка
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F16');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F17');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F18');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F19');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F20');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F21');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F22');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F23');
+  end;
+  
+  if ( ( tnk.ST and 2 ) = 2 )//Наполнение   КОАГУЛЯТОРА
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F15');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F24');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F28');
+  end;
+  
+  if ( ( tnk.ST and 4 ) = 4 )//Наполнение   КОАГУЛЯТОРА
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F15');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F25');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F29');
+  end;
+  
+  if ( ( tnk.ST and 8 ) = 8 )//Наполнение   КОАГУЛЯТОРА
+    //tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F15');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F26');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F28');
+  end;
+  
+  if (( ( tnk.ST and 16 ) > 0 ) or (tnk.ST = 0) ) // Сумма операций, для которых нужна таблица
+    tnkObj.R('RModeTableBR').Visible := true;
+  end;
+  
+endf;
+function extern SetTableWHEY(tnkObj);    //БАЧОК ОТКАЧКИ СЫВОРОТКИ
+  tnkObj.R ('RModeTableWHEY').ClearJoinList;
+  
+  
+  local table, table1;
+  
+  table := tnkObj.R('RModeTableWHEY');
+  tnkObj.R('RModeTableWHEY').Visible := false;
+  
+  table.ClearJoinList;
+  
+  local mix, cmd, num, tnk, cool, line, heat, master;
+  num := Str(tnkObj.Nmr, 1);
+  
+  cmd := 'MasterObj';//master
+  master := &&cmd;
+  
+  cmd := 'WheyTankObj' + num;
+  tnk := &&cmd;
+  
+  
+  if ( ( tnk.ST and 1 ) = 1 )//Мойка
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F3');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F4');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F6');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F9');
+  end;
+  
+  if ( ( tnk.ST and 2 ) = 2 )//РАБОТА
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F10');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F11');
+  end;
+  
+  
+  if (( ( tnk.ST and 4 ) > 0 ) or (tnk.ST = 0) ) // Сумма операций, для которых нужна таблица
+    tnkObj.R('RModeTableWHEY').Visible := true;
+  end;
+  
+endf;
+
+function extern SetTableBRN(tnkObj);    //ТАНК ДОЗИРОВАНИЯ РАССОЛА
+  tnkObj.R ('RModeTableBRN').ClearJoinList;
+  tnkObj.R ('RModeCoolTableBRN').ClearJoinList;
+  
+  local table, table1;
+  
+  table := tnkObj.R('RModeTableBRN');
+  tnkObj.R('RModeTableBRN').Visible := false;
+  
+  table1 := tnkObj.R('RModeCoolTableBRN');
+  tnkObj.R('RModeCoolTableBRN').Visible := false;
+  
+  table.ClearJoinList;
+  table1.ClearJoinList;
+  
+  local mix, cmd, num, tnk, cool, line, heat, master;
+  num := Str(tnkObj.Nmr, 1);
+  
+  cmd := 'MasterObj';//master
+  master := &&cmd;
+  
+  cmd := 'FBrineTankCoolObj' + num;  //УЗЕЛ ОХЛАЖДЕНИЯ
+  cool := &&cmd;
+  
+  cmd := 'FBrineTankMixObj' + num;  //узел перемешивания
+  mix := &&cmd;
+  
+  cmd := 'FBrineTankObj' + num;  //ТАНК ДОЗИРОВАНИЯ РАССОЛА
+  tnk := &&cmd;
+  
+  
+  if ( ( cool.ST and 1 ) = 1 )//ОХЛАЖДЕНИЕ
+    cool.R(table1.name).JoinToProp(cool.name,'S_PAR_F3');
+    cool.R(table1.name).JoinToProp(cool.name,'S_PAR_F4');
+  end;
+  
+  if ( ( mix.ST and 1 ) = 1 )//Перемешивание
+    mix.R(table1.name).JoinToProp(mix.name,'S_PAR_F3');
+    mix.R(table1.name).JoinToProp(mix.name,'S_PAR_F4');
+    mix.R(table1.name).JoinToProp(mix.name,'S_PAR_F5');
+    mix.R(table1.name).JoinToProp(mix.name,'S_PAR_F7');
+    mix.R(table1.name).JoinToProp(mix.name,'S_PAR_F8');
+  end;
+  
+  
+  if ( ( tnk.ST and 1 ) = 1 )//Мойка
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F16');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F17');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F18');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F19');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F20');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F21');
+  end;
+  
+  if ( ( tnk.ST and 2 ) = 2 )//Наполнение
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F11');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F12');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F13');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F14');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F29');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F30');
+    
+  end;
+  
+  if ( ( tnk.ST and 4 ) = 4 )//РАСТВОРЕНИЕ
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F15');
+  end;
+  
+  
+  if ( ( tnk.ST and 8 ) = 8 )//ХРАНЕНИЕ
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F13');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F14');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F31');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F32');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F47');
+    
+  end;
+  
+  
+  if ( ( tnk.ST and 16 ) = 16 )//ВЫДАЧА
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F13');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F14');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F33');
+    tnkObj.R(table.name).JoinToProp(tnk.name,'S_PAR_F34');
+  end;
+  
+  if (( ( tnk.ST and 35 ) > 0 ) or (tnk.ST = 0) or (( cool.ST and 1 ) > 0 ) or (cool.ST = 0)  or (( mix.ST and 1 ) > 0 ) or (mix.ST = 0) ) // Сумма операций, для которых нужна таблица
+    tnkObj.R('RModeTableBRN').Visible := true;
+    tnkObj.R('RModeCoolTableBRN').Visible := true;
+  end;
+  
+endf;
+function extern Menu( self, Type{1 - Tanks, 0 - Wash, 2 - Mesh}, obj );
+  {local i, j, k, r;
+  local cmd;               //переменная для формирования команд
+  local mask;              //переменная для формирования маски для перебора режимов
+  local res;               //возвращаемое значение из SHOWMENU
+  local canMask;           //маска для формирования ограничений
+  local promt;             //переменная для формирования диалога подтверждения вкл/выкл режима
+  local menuElementsCnt;   //максимальное количество строк вызываемого меню
+  local ModeEnabled;       //массив масок доступных режимов при включенном данном режиме
+  local Mode;              //массив названий режимов
+  local regimMask;         //текущее состояние объекта
+  local cmdTrue;           //флаг разрешения посылки команды в контроллер
+  local manual;            //маска доступных режимов в ручном режиме
+  local BeginReg;           //начало отсчёта списка режимов
+  local BeginMask;         //начальная маска списка режимов
+  local startmask, starti, z;
+  regimMask:=obj.ST;
+  
+  if ( Type = 1 ) //линия наполнения мс2
+    // ModeEnabled := ModeTankEnabled;
+    Mode := modeLineIn1; //бункер
+    menuElementsCnt := 2;
+    startmask := 1;
+    starti :=0;
+    canMask := 15;
+    // manual := 3;
+  end;
+  
+  
+  mask := 1;
+  i := 0;
+  
+  
+  
+  if ( canMask = 0  ) //Если финальная маска =0 значит где то неправильные маски - ТАКОГО НЕ ДОЛЖНО БЫТЬ!!!
+    QOut('Ошибка! Выберите нужный режим вручную!');
+    return();
+  end;
+  //-Если объект танк начало обработки режимов с 0 элемента(и соответствующая начальная маска)
+  mask := startmask;
+  i := starti;
+  //-----------------------------------------------------------------------------------------
+  
+  j := 0;
+  cmd := '';
+  
+  //-----------------Цикл формирования вызываемого меню--------------------------------------
+  while ( i < menuElementsCnt )
+    // if ( ( canMask and mask) = mask )  //режим доступен
+    if ( ( regimMask and mask) = 0 ) //режим не работает, должно быть 'включить ...'
+      cmd := cmd + ',"' + Mode[0,i] + '"';
+      enabledElements[0, j] := Mode[0,i];
+      enabledElements[1, j] := i;
+      j := j + 1;
+    else //режим работает, должно быть 'выключить ...'
+      cmd := cmd + ',"ОТКЛЮЧИТЬ ' + Mode[0,i] + '"';
+      enabledElements[0, j] := 'ОТКЛЮЧИТЬ ' + Mode[0,i];
+      enabledElements[1, j] := i;
+      j := j + 1;
+    end;
+    i := i + 1;
+    mask := 2*mask;
+  end;
+  
+  cmd := cmd[2]; //Удаляем первую лишнюю зпт
+  cmd := 'ShowMenu(' + cmd + ')'; //Формирование команды вызова меню
+  res := &&cmd;                   //Вызов меню и получение ответа
+  
+  if (res <> -1) //Если выбран режим (не нажали крестик)
+    mask := 2**enabledElements[1, res]; //маска включаемого режима
+    promt := enabledElements[0, res] + '?'; //строка подтверждения выполнения действия
+    if ( (regimMask and mask) = 0 )         // режим не включен
+      if (MESSAGEDLG(promt)=1)    //запрос на подтверждение вкл режима
+        cmdTrue:=1;
+      end;
+      if (cmdTrue=1) //если параметры записались
+        obj.cmd := 1001 + enabledElements[1, res]; //посылка команды на выполнение
+      end;
+    else
+      mask := not mask;
+      if (MESSAGEDLG(promt)=1)
+        obj.cmd := 2001 + enabledElements[1, res];
+      end;
+    end;
+    end;}
+  endf;
+  
+  
+  {function extern LogSWashBegin(obj);  //запись прослеживаемости старт мойки
+  if (StartLog <> 0)
+    local x;
+    x:=VarArrayCreate([0, 8], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=projectId;
+    x[4]:=obj.WorkCenter;
+    x[5]:=31;
+    x[6]:=1;
+    x[7]:='paramstart';
+    x[8]:='paramend';
+    obj.WriteToLog(11, x);
+  end;
+endf;
+function extern LogSWashEnd(obj);  //Tank   //запись прослеживаемости окончания мойки
+  if (StartLog <> 0)
+    local x;
+    x:=VarArrayCreate([0, 8], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=projectId;
+    x[4]:=obj.WorkCenter;//Tank.WorkCenter;
+    x[5]:=31;
+    x[6]:=2;
+    x[7]:='paramstart';
+    x[8]:='paramend';
+    obj.WriteToLog(11, x);
+  end;
+endf;
+function extern LogSFermentationBegin(obj); //obj  внесение закваски
+  if (StartLog <> 0)
+    
+    local cmd, temp1, temp2;
+    local Snmr;
+    
+    if (obj.Nmr <= 3 )
+      Snmr := str(obj.Nmr,1);
+    else
+      Snmr := str(obj.Nmr,2);
+    end;
+    
+    local x;
+    x:=VarArrayCreate([0, 10], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=ProjectId;
+    x[4]:=obj.WorkCenter;
+    x[5]:=27;
+    x[6]:=1;
+    x[7]:='paramstart';
+    x[8]:='P_TE1';
+    cmd := 'KOAG' + Snmr + 'TE1';
+    temp1 := &&cmd;
+    cmd := 'KOAG' + Snmr + 'TE2';
+    temp2 := &&cmd;
+    x[9]:= (temp1.V + temp2.V) / 2;
+    x[10]:='paramend';
+    obj.WriteToLog(11, x);
+  end;
+endf;
+
+function extern LogSFermentationEnd(obj); //obj  внесение закваски
+  if (StartLog <> 0)
+    
+    local cmd, temp1, temp2;
+    local Snmr;
+    
+    if (obj.Nmr <= 9 )
+      Snmr := str(obj.Nmr,1);
+    else
+      Snmr := str(obj.Nmr,2);
+    end;
+    
+    local x;
+    x:=VarArrayCreate([0, 10], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=ProjectId;
+    x[4]:=obj.WorkCenter;
+    x[5]:=27;
+    x[6]:=2;
+    x[7]:='paramstart';
+    x[8]:='P_TE2';
+    cmd := 'KOAG' + Snmr + 'TE1';
+    temp1 := &&cmd;
+    cmd := 'KOAG' + Snmr + 'TE2';
+    temp2 := &&cmd;
+    x[9]:= (temp1.V + temp2.V) / 2;
+    x[10]:='paramend';
+    obj.WriteToLog(11, x);
+  end;
+endf;
+function extern LogSSerumBegin(obj); //obj  отделение сыворотки
+  if (StartLog <> 0)
+    
+    local cmd, temp1, temp2;
+    local Snmr;
+    
+    if (obj.Nmr <= 3 )
+      Snmr := str(obj.Nmr,1);
+    else
+      Snmr := str(obj.Nmr,2);
+    end;
+    
+    local x;
+    x:=VarArrayCreate([0, 10], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=ProjectId;
+    x[4]:=obj.WorkCenter;
+    x[5]:=21;
+    x[6]:=1;
+    x[7]:='paramstart';
+    x[8]:='P_TE1';
+    cmd := 'KOAG' + Snmr + 'TE1';
+    temp1 := &&cmd;
+    cmd := 'KOAG' + Snmr + 'TE2';
+    temp2 := &&cmd;
+    x[9]:= (temp1.V + temp2.V) / 2;
+    x[10]:='paramend';
+    obj.WriteToLog(11, x);
+  end;
+endf;
+function extern LogSSerumEnd(obj); //obj  отделение сыворотки
+  if (StartLog <> 0)
+    
+    local cmd, temp1, temp2;
+    local Snmr;
+    
+    if (obj.Nmr <= 3 )
+      Snmr := str(obj.Nmr,1);
+    else
+      Snmr := str(obj.Nmr,2);
+    end;
+    
+    local x;
+    x:=VarArrayCreate([0, 10], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=ProjectId;
+    x[4]:=obj.WorkCenter;
+    x[5]:=21;
+    x[6]:=2;
+    x[7]:='paramstart';
+    x[8]:='P_TE2';
+    cmd := 'KOAG' + Snmr + 'TE1';
+    temp1 := &&cmd;
+    cmd := 'KOAG' + Snmr + 'TE2';
+    temp2 := &&cmd;
+    x[9]:= (temp1.V + temp2.V) / 2;
+    x[10]:='paramend';
+    obj.WriteToLog(11, x);
+  end;
+endf;
+
+function extern LogSKeepBegin(Tank);  //хранение
+  if (StartLog <> 0)
+    local x;
+    x:=VarArrayCreate([0, 8], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=projectId;
+    x[4]:=Tank.WorkCenter;
+    x[5]:=5;
+    x[6]:=1;
+    x[7]:='paramstart';
+    x[8]:='paramend';
+    Tank.WriteToLog(11, x);
+  end;
+endf;
+function extern LogSKeepEnd(Tank); //хранение
+  if (StartLog <> 0)
+    local x;
+    x:=VarArrayCreate([0, 8], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=projectId;
+    x[4]:=Tank.WorkCenter;
+    x[5]:=5;
+    x[6]:=2;
+    x[7]:='paramstart';
+    x[8]:='paramend';
+    Tank.WriteToLog(11, x);
+  end;
+endf;
+
+function extern LogSETMBegin(obj);  //ВЫХОД НА ПРОИЗВОДСТВО
+  if (StartLog <> 0)
+    local x;
+    x:=VarArrayCreate([0, 8], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=projectId;
+    x[4]:=obj.WorkCenter;
+    x[5]:=130;
+    x[6]:=1;
+    x[7]:='paramstart';
+    x[8]:='paramend';
+    obj.WriteToLog(11, x);
+  end;
+endf;
+function extern LogSETMEnd(obj); //ВЫХОД НА ПРОИЗВОДСТВО
+  if (StartLog <> 0)
+    local x;
+    x:=VarArrayCreate([0, 8], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=projectId;
+    x[4]:=obj.WorkCenter;
+    x[5]:=130;
+    x[6]:=2;
+    x[7]:='paramstart';
+    x[8]:='paramend';
+    obj.WriteToLog(11, x);
+  end;
+endf;
+function extern LogSProductionBegin(obj);  //производство
+  if (StartLog <> 0)
+    local x;
+    x:=VarArrayCreate([0, 8], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=projectId;
+    x[4]:=obj.WorkCenter;
+    x[5]:=131;
+    x[6]:=1;
+    x[7]:='paramstart';
+    x[8]:='paramend';
+    obj.WriteToLog(11, x);
+  end;
+endf;
+function extern LogSProductionEnd(obj); //производство
+  if (StartLog <> 0)
+    local x;
+    x:=VarArrayCreate([0, 8], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=projectId;
+    x[4]:=obj.WorkCenter;
+    x[5]:=131;
+    x[6]:=2;
+    x[7]:='paramstart';
+    x[8]:='paramend';
+    obj.WriteToLog(11, x);
+  end;
+endf;
+
+function extern LogSVitesnBegin(obj);  //вытеснение
+  if (StartLog <> 0)
+    local x;
+    x:=VarArrayCreate([0, 8], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=projectId;
+    x[4]:=obj.WorkCenter;
+    x[5]:=110;
+    x[6]:=1;
+    x[7]:='paramstart';
+    x[8]:='paramend';
+    obj.WriteToLog(11, x);
+  end;
+endf;
+function extern LogSVitesnEnd(obj); //вытеснение
+  if (StartLog <> 0)
+    local x;
+    x:=VarArrayCreate([0, 8], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=projectId;
+    x[4]:=obj.WorkCenter;
+    x[5]:=110;
+    x[6]:=2;
+    x[7]:='paramstart';
+    x[8]:='paramend';
+    obj.WriteToLog(11, x);
+  end;
+endf;
+function extern LogSInBegin(Tank, Oper, RcIn); //obj наполнение
+  if (StartLog <> 0)
+    local x;
+    x:=VarArrayCreate([0, 10], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=ProjectId;
+    x[4]:=Tank.WorkCenter;
+    x[5]:=Oper;
+    x[6]:=1;
+    x[7]:='paramstart';
+    x[8]:='P_RCIN';
+    x[9]:=RCIn;
+    x[10]:='paramend';
+    Tank.WriteToLog(11, x);
+  end;
+endf;
+function extern LogSInEnd(Tank, Oper, RcIn); //obj наполнение
+  if (StartLog <> 0)
+    local x;
+    x:=VarArrayCreate([0, 8], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=ProjectId;
+    x[4]:=Tank.WorkCenter;
+    x[5]:=Oper;
+    x[6]:=2;
+    x[7]:='paramstart';
+    x[8]:='paramend';
+    Tank.WriteToLog(11, x);
+  end;
+endf;
+
+function extern LogSInWBegin(Tank, Oper, RcIn); //obj наполнение
+  if (StartLog <> 0)
+    local x;
+    x:=VarArrayCreate([0, 12], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=ProjectId;
+    x[4]:=Tank.WorkCenter;
+    x[5]:=Oper;
+    x[6]:=1;
+    x[7]:='paramstart';
+    x[8]:='P_CNT_Z';
+    x[9]:=Tank.S_PAR_F16;//ЖЕЛАЕМОЕ
+    x[10]:='P_RCIN';
+    x[11]:=RCIn;
+    x[12]:='paramend';
+    Tank.WriteToLog(11, x);
+  end;
+endf;
+function extern LogSInWEnd(Tank, Oper, RcIn); //obj наполнение
+  if (StartLog <> 0)
+    local x;
+    local cmd, fqt;
+    
+    x:=VarArrayCreate([0, 10], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=ProjectId;
+    x[4]:=Tank.WorkCenter;
+    x[5]:=Oper;
+    x[6]:=2;
+    x[7]:='paramstart';
+    x[8]:='P_CNT';
+    cmd := 'W13FQT1';
+    fqt := &&cmd;
+    x[9]:= fqt.V ;
+    x[10]:='paramend';
+    Tank.WriteToLog(11, x);
+  end;
+endf;
+function extern LogSOutBegin(Tank, Oper, RcOut); //obj  выдача
+  if (StartLog <> 0)
+    local x;
+    x:=VarArrayCreate([0, 10], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=ProjectId;
+    x[4]:=Tank.WorkCenter;
+    x[5]:=51;
+    x[6]:=1;
+    x[7]:='paramstart';
+    x[8]:='P_RCOUT';
+    x[9]:=RCOut;
+    x[10]:='paramend';
+    Tank.WriteToLog(11, x);
+  end;
+endf;
+function extern LogSOutEnd(Tank, Oper, RcOut); //obj выдача
+  if (StartLog <> 0)
+    local x;
+    x:=VarArrayCreate([0, 8], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=ProjectId;
+    x[4]:=Tank.WorkCenter;
+    x[5]:=51;
+    x[6]:=2;
+    x[7]:='paramstart';
+    x[8]:='paramend';
+    Tank.WriteToLog(11, x);
+  end;
+endf;
+
+function extern LogSDrenagBegin(Tank);
+  if (StartLog <> 0)
+    local x;
+    x:=VarArrayCreate([0, 8], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=projectId;
+    x[4]:=Tank.WorkCenter;
+    x[5]:=32;
+    x[6]:=1;
+    x[7]:='paramstart';
+    x[8]:='paramend';
+    Tank.WriteToLog(11, x);
+  end;
+endf;
+function extern LogSDrenagEnd(Tank);
+  if (StartLog <> 0)
+    local x;
+    x:=VarArrayCreate([0, 8], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=projectId;
+    x[4]:=Tank.WorkCenter;
+    x[5]:=32;
+    x[6]:=2;
+    x[7]:='paramstart';
+    x[8]:='paramend';
+    Tank.WriteToLog(11, x);
+  end;
+endf;
+
+function extern LogSProtBegin(Tank);
+  if (StartLog <> 0)
+    local x;
+    x:=VarArrayCreate([0, 8], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=projectId;
+    x[4]:=Tank.WorkCenter;
+    x[5]:=24;
+    x[6]:=1;
+    x[7]:='paramstart';
+    x[8]:='paramend';
+    Tank.WriteToLog(11, x);
+  end;
+endf;
+function extern LogSProtEnd(Tank);
+  if (StartLog <> 0)
+    local x;
+    x:=VarArrayCreate([0, 8], varVariant);
+    x[0]:='operation';
+    x[1]:=now;
+    x[2]:=0;
+    x[3]:=projectId;
+    x[4]:=Tank.WorkCenter;
+    x[5]:=24;
+    x[6]:=2;
+    x[7]:='paramstart';
+    x[8]:='paramend';
+    Tank.WriteToLog(11, x);
+  end;
+  endf;}
+//---StaticFunctionsEnd
+function extern OnAfterPrjCreate;
+StartLog := 1;
+endf;
