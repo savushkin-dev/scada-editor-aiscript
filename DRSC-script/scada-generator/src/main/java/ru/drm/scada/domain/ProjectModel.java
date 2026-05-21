@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Целостная модель SCADA-проекта, полученная из PDF-описаний и Lua-скриптов.
+ * Целостная модель SCADA-проекта, полученная из Lua-скриптов.
  */
 public class ProjectModel {
 

@@ -7,10 +7,10 @@ import ru.drm.scada.domain.EquipmentType;
 import ru.drm.scada.domain.ProjectDescription;
 import ru.drm.scada.domain.ProjectModel;
 
+import java.util.Arrays;
 import java.util.Collections;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.*;
 
 class ProjectModelAssemblerTest {
 
@@ -38,6 +38,25 @@ class ProjectModelAssemblerTest {
         assertEquals("test-project", model.getProjectId());
         assertEquals(1, model.getEquipments().size());
         assertEquals(1, model.getControlLogics().size());
+    }
+
+    @Test
+    void assemble_shouldBuildEquipmentFromLuaTagIds() {
+        ProjectDescription description = new ProjectDescription();
+        description.setProjectId("test");
+
+        ControlLogic logic = new ControlLogic();
+        logic.setId("prg");
+        logic.setTagIds(Arrays.asList("ALPMAGW5DI488511", "ALPMAGW5AI480512", "LA_TANK1AO11"));
+
+        ProjectModel model = ProjectModelAssembler.assemble(description, Collections.singletonList(logic));
+
+        assertTrue(model.getEquipments().size() >= 2);
+        Equipment alpma = model.getEquipments().stream()
+                .filter(e -> "ALPMAGW5".equals(e.getId()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(2, alpma.getTags().size());
     }
 }
 

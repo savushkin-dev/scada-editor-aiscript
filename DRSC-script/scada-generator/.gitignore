@@ -1,0 +1,35 @@
+# Maven / Java
+target/
+*.class
+*.jar
+*.war
+*.ear
+hs_err_pid*
+
+# Cursor (локальные правила IDE, не в репозиторий)
+.cursor/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+bin/
+
+# Локальные выходы CLI (генерируются командами generate/update)
+out-*/
+demo-output/
+generated-projects/
+
+# Логи и временные файлы
+*.log
+*.tmp
+*.swp
+*~
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store

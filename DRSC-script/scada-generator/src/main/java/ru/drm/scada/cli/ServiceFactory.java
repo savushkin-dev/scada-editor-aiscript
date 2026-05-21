@@ -1,13 +1,13 @@
 package ru.drm.scada.cli;
 
+import ru.drm.scada.adapter.ai.OpenAiLuaAnalyzer;
 import ru.drm.scada.adapter.lua.SimpleLuaParser;
-import ru.drm.scada.adapter.pdf.PdfBoxPdfParser;
-import ru.drm.scada.generator.NoOpDeltaUpdater;
-import ru.drm.scada.generator.XmlProjectGenerator;
+import ru.drm.scada.generator.IncrementalProjectUpdater;
+import ru.drm.scada.generator.MonitorUnitsGenerator;
 import ru.drm.scada.usecase.*;
 
 /**
- * Простейшая фабрика для сборки ScadaProjectService и зависимостей без DI-фреймворков.
+ * Фабрика для сборки ScadaProjectService и зависимостей.
  */
 final class ServiceFactory {
 
@@ -15,11 +15,11 @@ final class ServiceFactory {
     }
 
     static ScadaProjectService createScadaProjectService() {
-        PdfParser pdfParser = new PdfBoxPdfParser();
         LuaParser luaParser = new SimpleLuaParser();
-        ProjectGenerator projectGenerator = new XmlProjectGenerator();
-        DeltaUpdater deltaUpdater = new NoOpDeltaUpdater();
-        return new ScadaProjectServiceImpl(pdfParser, luaParser, projectGenerator, deltaUpdater);
+        ProjectGenerator projectGenerator = new MonitorUnitsGenerator();
+        DeltaUpdater deltaUpdater = new IncrementalProjectUpdater(new MonitorUnitsGenerator());
+        return new ScadaProjectServiceImpl(
+                luaParser, projectGenerator, deltaUpdater, new OpenAiLuaAnalyzer());
     }
 }
 

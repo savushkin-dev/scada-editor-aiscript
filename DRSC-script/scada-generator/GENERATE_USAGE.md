@@ -365,6 +365,4 @@ java -jar scada-generator-0.1.0-SNAPSHOT.jar generate \
 notepad <папка_для_результата>\project.xml
 ```
 
----
 
-**Готово к использованию!** 🚀

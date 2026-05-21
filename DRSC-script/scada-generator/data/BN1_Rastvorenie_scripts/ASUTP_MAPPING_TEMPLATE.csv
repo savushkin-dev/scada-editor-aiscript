@@ -1,0 +1,8 @@
+tag_regex,example_tag,placeholders,handler_types_or_names,mode,comment,confirmed_by_asutp
+^MCA4LINE(?<line>\d)DI,MCA4LINE3DI1,line from group line,"on_click_line_p03;on_click_line_p04;on_getcolor_line_p03;on_getcolor_line_p04",xml_and_script,Линии MCA4 - уже в yaml,yes
+^ALMIX\d,ALMIX1DI1,,,xml_only,Заполнить АСУТП - какие OnClick/OnGetColor если нужны,no
+^CAB\d,CAB3DI2,,,xml_only,Шкаф - уточнить у АСУТП,no
+^M18DI,M18DI1,,,xml_only,Модуль M18 - уточнить,no
+^R(?<line>\d{2})DI,R21DI12,line from group line,on_click_line_p03;on_click_line_p04,xml_and_script,ЭВРИСТИКА rack=line - подтвердить,no
+^PM2DI,PM2DI3,li=02 (constant),li_m02_p03_bundle,xml_and_script,ЭВРИСТИКА PM2->LI02 - подтвердить,no
+^LI(?<li>\d{2}),LI02XXX,li from group li,li_m02_p03_bundle;li_m02_p04_bundle,xml_and_script,Пакет LI M02 - в yaml,yes

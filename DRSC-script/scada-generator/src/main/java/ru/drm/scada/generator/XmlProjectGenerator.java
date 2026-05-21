@@ -87,6 +87,17 @@ public class XmlProjectGenerator implements ProjectGenerator {
                 ));
                 logicEl.appendChild(codeEl);
 
+                // Ссылки на теги, участвующие в логике (если Lua-парсер их нашёл)
+                if (logic.getTagIds() != null && !logic.getTagIds().isEmpty()) {
+                    org.w3c.dom.Element tagRefsEl = doc.createElement("TagRefs");
+                    for (String tagId : logic.getTagIds()) {
+                        org.w3c.dom.Element refEl = doc.createElement("TagRef");
+                        refEl.setAttribute("id", tagId);
+                        tagRefsEl.appendChild(refEl);
+                    }
+                    logicEl.appendChild(tagRefsEl);
+                }
+
                 logicsEl.appendChild(logicEl);
             }
 

@@ -1,0 +1,83 @@
+# Маппинг Lua-тегов → типы обработчиков Monitor (BN1).
+# handlerTypes — шаблоны function extern; luaMappings — какие теги к каким типам относятся.
+# handlerTypeBundles — пакеты имён из scripts.txt по маске с *.
+
+handlerTypes:
+  on_click_line_p03:
+    - canonical: OnClickR_L01_P03
+      namePattern: "OnClickR_L{line}_P03"
+  on_click_line_p04:
+    - canonical: OnClickR_L01_P04
+      namePattern: "OnClickR_L{line}_P04"
+  on_getcolor_line_p03:
+    - canonical: OnGetColorR_L01_P03
+      namePattern: "OnGetColorR_L{line}_P03"
+  on_getcolor_line_p04:
+    - canonical: OnGetColorR_L01_P04
+      namePattern: "OnGetColorR_L{line}_P04"
+  on_click_li_m02_p03_t01:
+    - canonical: OnClickR_LI01_M02_P03_T01
+      namePattern: "OnClickR_LI{li}_M02_P03_T01"
+    - canonical: OnGetColorR_LI01_M02_P03_T01
+      namePattern: "OnGetColorR_LI{li}_M02_P03_T01"
+  on_click_li_m02_p03_t02:
+    - canonical: OnClickR_LI01_M02_P03_T02
+      namePattern: "OnClickR_LI{li}_M02_P03_T02"
+    - canonical: OnGetColorR_LI01_M02_P03_T02
+      namePattern: "OnGetColorR_LI{li}_M02_P03_T02"
+
+handlerTypeBundles:
+  li_m02_p03_bundle:
+    patterns:
+      - "OnClickR_LI{li}_M02_P03_T*"
+      - "OnGetColorR_LI{li}_M02_P03_T*"
+  li_m02_p04_bundle:
+    patterns:
+      - "OnClickR_LI{li}_M02_P04_T*"
+      - "OnGetColorR_LI{li}_M02_P04_T*"
+
+luaMappings:
+  - tagIdRegex: "^L(?<line>\\d{2})"
+    types: [on_click_line_p03, on_click_line_p04, on_getcolor_line_p03, on_getcolor_line_p04]
+
+  - tagIdRegex: "^MCA4LINE(?<line>\\d)"
+    types: [on_click_line_p03, on_click_line_p04, on_getcolor_line_p03, on_getcolor_line_p04]
+
+  - tagIdRegex: "^MCA4LINE(?<line>\\d)DI"
+    types: [on_click_line_p03, on_click_line_p04, on_getcolor_line_p03, on_getcolor_line_p04]
+
+  - tagIdRegex: "^LI(?<li>\\d{2})"
+    types: [li_m02_p03_bundle, li_m02_p04_bundle]
+
+  # Эвристика rack → line (подтвердить с АСУТП)
+  - tagIdRegex: "^R(?<line>\\d{2})DI"
+    types: [on_click_line_p03, on_click_line_p04]
+
+  # PM2 → линия входа 02 (эвристика)
+  - tagIdRegex: "^PM2DI"
+    types: [li_m02_p03_bundle]
+    defaultPlaceholders:
+      li: "02"
+
+  # Только Units.xml, без Units.script
+  - tagIdRegex: "^ALMIX\\d"
+    types: []
+  - tagIdRegex: "^CAB\\d"
+    types: []
+  - tagIdRegex: "^BOTTLERY\\d"
+    types: []
+  - tagIdRegex: "^M18DI"
+    types: []
+
+types:
+  - id: on_click_line_p03
+    tagIdRegex: "^L(\\d{2})"
+    handlers:
+      - canonical: OnClickR_L01_P03
+        namePattern: "OnClickR_L{line}_P03"
+  - id: on_click_line_p04
+    tagIdRegex: "^L(\\d{2})"
+    handlers:
+      - canonical: OnClickR_L01_P04
+        namePattern: "OnClickR_L{line}_P04"
+

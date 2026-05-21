@@ -1,0 +1,11 @@
+# Список обязательных тегов для приёмки (заполняет АСУТП / руководитель)
+# По одному тегу на строку. Минимум 20, рекомендуется до 50.
+# Теги с handlers в Units.script после generate -s / update -s
+
+MCA4LINE3DI1
+MCA4LINE3DI2
+MCA4LINE4DI11
+# ALMIX1DI1
+# CAB3DI2
+# R21DI12
+# PM2DI3

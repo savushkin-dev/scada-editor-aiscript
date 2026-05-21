@@ -19,7 +19,12 @@ class SimpleLuaParserTest {
     @Test
     void parse_shouldReturnSingleControlLogicWithFileContent() throws IOException {
         Path tempFile = Files.createTempFile("test-logic", ".lua");
-        String content = "print('hello from lua')";
+        String content = ""
+                + "print('hello from lua')\n"
+                + "local x = DI(\"TAG_DI_1\")\n"
+                + "local y = DO(\"TAG_DO_1\")\n"
+                + "local a = AI(\"TAG_AI_1\")\n"
+                + "local b = AO(\"TAG_AO_1\")\n";
         Files.writeString(tempFile, content, StandardCharsets.UTF_8);
 
         LuaParser parser = new SimpleLuaParser();
@@ -30,6 +35,10 @@ class SimpleLuaParserTest {
         ControlLogic logic = logics.get(0);
         assertNotNull(logic.getLuaCode());
         assertFalse(logic.getLuaCode().isEmpty());
+        assertNotNull(logic.getTagIds());
+        assertEquals(4, logic.getTagIds().size());
+        // Порядок сохраняется за счёт LinkedHashSet в парсере
+        assertEquals("TAG_DI_1", logic.getTagIds().get(0));
     }
 }
 

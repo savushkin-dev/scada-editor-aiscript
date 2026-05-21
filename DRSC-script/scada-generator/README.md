@@ -1,6 +1,7 @@
 # scada-generator
 
-Генератор и инкрементальный апдейтер SCADA XML‑проекта из **PDF** и **Lua** источников.
+Модуль генерации и инкрементального обновления SCADA XML‑проекта из **Lua**‑файлов и текстового описания
+с возможностью использования **искусственного интеллекта**.
 
 Проект — **CLI-приложение** (командная строка) на Java.
 
@@ -48,9 +49,11 @@ cd C:\DRM\scada-generator
 
 Доступные команды:
 
-- `generate` — генерация проекта
-- `update` — инкрементальное обновление проекта
-- `watch` — заготовка (пока не реализовано)
+- `generate` — генерация/перегенерация SCADA‑проекта из Lua‑источников (с ИИ или без)
+- `update` — инкрементальное обновление существующего проекта
+- `watch` — наблюдение за каталогом Lua и автоматический `update`
+
+Документы для руководителя: [`docs/PRESENTATION.md`](docs/PRESENTATION.md) (сценарий демо), [`docs/ДЛЯ_РУКОВОДИТЕЛЯ.md`](docs/ДЛЯ_РУКОВОДИТЕЛЯ.md) (статус и запросы).
 
 ## Команда generate
 
@@ -60,20 +63,32 @@ cd C:\DRM\scada-generator
 & "$env:JAVA_HOME\bin\java.exe" -jar target\scada-generator-0.1.0-SNAPSHOT.jar generate --help
 ```
 
-Запуск (пример):
+Запуск (пример, текущая реализация):
 
 ```powershell
 & "$env:JAVA_HOME\bin\java.exe" -jar target\scada-generator-0.1.0-SNAPSHOT.jar generate `
-  --pdf "C:\path\to\spec.pdf" `
-  --lua "C:\path\to\logic.lua" `
-  --output "C:\path\to\out-project"
+  -l "C:\path\to\lua-sources" `
+  -o "C:\path\to\out-project" `
+  -s "C:\path\to\BN1_Rastvorenie_scripts\scripts.txt"
 ```
 
-Что делают параметры:
+С поддержкой ИИ‑анализа Lua:
 
-- `--pdf`: путь к PDF с описанием проекта/оборудования
-- `--lua`: путь к Lua-скрипту (логика)
-- `--output`: каталог, куда будет сгенерирован проект
+```powershell
+& "$env:JAVA_HOME\bin\java.exe" -jar target\scada-generator-0.1.0-SNAPSHOT.jar generate `
+  -l "C:\path\to\lua-sources" `
+  -o "C:\path\to\out-project" `
+  --ai
+```
+
+Параметры:
+
+- `-l, --lua`: путь к Lua‑файлу или директории с Lua‑файлами (логика процесса).
+- `-o, --output`: каталог, куда будет сгенерирован SCADA‑проект.
+- `-s, --handlers-source`: каталог шаблонов (`scripts.txt`) — при generate создаёт начальный `Units.script`.
+- `--type-mapping`: путь к `type-mapping.yaml` (по умолчанию рядом с `-s`).
+- `--ai`: при наличии используется ИИ для извлечения дополнительных тегов из Lua
+  (см. подробнее `AI_LUA_USAGE.md`).
 
 ## Команда update
 
@@ -83,15 +98,25 @@ cd C:\DRM\scada-generator
 & "$env:JAVA_HOME\bin\java.exe" -jar target\scada-generator-0.1.0-SNAPSHOT.jar update --help
 ```
 
-Запуск (пример):
+Запуск (пример, текущая реализация):
 
 ```powershell
 & "$env:JAVA_HOME\bin\java.exe" -jar target\scada-generator-0.1.0-SNAPSHOT.jar update `
-  --pdf "C:\path\to\spec.pdf" `
-  --lua "C:\path\to\logic.lua" `
-  --existing "C:\path\to\existing-project" `
-  --metadata "C:\path\to\metadata-dir"
+  -l "C:\path\to\lua-sources" `
+  -e "C:\path\to\existing-project" `
+  -m "C:\path\to\metadata-dir" `
+  -s "C:\path\to\BN1_Rastvorenie_scripts\scripts.txt" `
+  [--ai]
 ```
+
+Параметры:
+
+- `-l, --lua`: путь к Lua‑файлу или директории с Lua‑файлами.
+- `-e, --existing`: каталог существующего SCADA‑проекта.
+- `-m, --metadata`: каталог для хранения служебных метаданных (для диффа и обновления).
+- `-s, --handlers-source`: каталог шаблонов обработчиков Monitor (`scripts.txt`); при update дописывает `Units.script` для новых тегов по `type-mapping.yaml`.
+- `--type-mapping`: путь к `type-mapping.yaml` (по умолчанию — рядом с `--handlers-source`).
+- `--ai`: включить ИИ‑анализ Lua при обновлении.
 
 ## Запуск из IntelliJ IDEA (если удобнее “нажимать”)
 

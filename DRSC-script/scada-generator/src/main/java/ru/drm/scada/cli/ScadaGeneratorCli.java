@@ -9,7 +9,7 @@ import picocli.CommandLine.Command;
 @Command(
         name = "scada-generator",
         mixinStandardHelpOptions = true,
-        description = "SCADA project generator from PDF and Lua sources.",
+        description = "SCADA project generator from Lua sources.",
         subcommands = {
                 GenerateCommand.class,
                 UpdateCommand.class,

@@ -6,8 +6,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Промежуточное описание проекта, полученное из PDF (без логики).
- * Используется как результат PdfParser перед сборкой полной ProjectModel.
+ * Промежуточное описание проекта (без логики).
+ * Используется при сборке полной ProjectModel.
  */
 public class ProjectDescription {
 

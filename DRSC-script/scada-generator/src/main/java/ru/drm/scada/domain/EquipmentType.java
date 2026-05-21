@@ -9,6 +9,7 @@ public enum EquipmentType {
     TANK,
     SENSOR,
     CONTROLLER,
+    UNIT,    // Monitor unit (ALPMAGW5, LA_TANK1, P4790 и т.п.)
     GENERIC
 }
 

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<!-- Усечённый пример: узел events у отражения на карте (Monitor). -->
+<!-- Полный эталон см. data/MOZARELLA/.../Maps.xml -->
+<fragment>
+  <reflection>
+    <name>ExampleRefl</name>
+    <events>
+      <onclickpermissionslevel>1</onclickpermissionslevel>
+      <ondblclickpermissionslevel>1</ondblclickpermissionslevel>
+      <onhyperlinkpermissionslevel>1</onhyperlinkpermissionslevel>
+    </events>
+  </reflection>
+</fragment>

@@ -1,0 +1,1321 @@
+--Проект 'BN1-Растворение'
+package.path = package.path .. ';./dairy-sys/?.lua'
+
+prg = require("prg")                        --Технологические объекты.
+require( "sharedmodbus" )                   --Межконтроллерный обмен
+require("almix")
+require("term")
+safety = require( "safety" )
+------------------------------------------------------------------------------
+prg.line_in_v1.signal_column = HLA( 'MCC1HLA1' )
+------------------------------------------------------------------------------
+add_functionality( prg.user_object_almix1, basic_almix )
+add_functionality( prg.user_object_almix2, basic_almix )
+
+add_functionality( prg.user_object_heat_excr1, term )
+add_functionality( prg.user_object_heat_excr2, term )
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+local HEATING = 1
+local COOLING = 2
+local COOLING_OFF = 0
+local COOLING_ON = 1
+------------------------------------------------------------------------------
+-- Описание узла перемешивания в танке с 3-мя мешалками
+------------------------------------------------------------------------------
+tank_mixer = {}
+
+function tank_mixer:user_init()
+    self.M2 = M( 'TANK' .. self.n .. 'M2' )
+    self.M3 = M( 'TANK' .. self.n .. 'M3' )
+    self.prev_mask = 123
+    self.M2_used = true
+    self.M3_used = true
+end
+
+function tank_mixer:user_evaluate()
+    local par = self.par_float
+    local PAR = self.PAR_FLOAT
+    local m = self.operations.MIXING
+    local oper = self:get_modes_manager()[ m ]
+
+    if self:get_operation_state( m ) == operation.RUN then
+        local m_mask = par[ PAR.MIXER_MASK ]
+
+        if m_mask ~= self.prev_mask then
+            if m_mask ~= 1 and m_mask ~= 12 and m_mask ~= 123 then
+                par[ PAR.MIXER_MASK ] = self.prev_mask
+            else
+                if m_mask == 1 then
+                    self.M2_used = false
+                    self.M3_used = false
+                elseif m_mask == 12 then
+                    self.M2_used = true
+                    self.M3_used = false
+                else
+                    self.M2_used = true
+                    self.M3_used = true
+                end
+                self.prev_mask = m_mask
+            end
+        end
+
+        if oper:active_step() == self.steps.MIXING.RUN.WORKING then
+            local delta_LT = par[ PAR.MIX_DELTA_LT ]
+
+            if self.M2_used then
+                if par[ PAR.MIX_MIN_LT2 ] > 0 then
+                    local min_LT = par[ PAR.MIX_MIN_LT2 ]
+
+                    if self.LT:get_value() <= min_LT - delta_LT then
+                        self.M2:off()
+                        self.was_low_LT2 = true
+                    elseif self.was_low_LT2 then
+                        if self.LT:get_value() >= min_LT + delta_LT then
+                            self.was_low_LT2 = false
+                        else
+                            self.M2:off()
+                        end
+                    end
+                end
+            else
+                self.M2:off()
+            end
+
+            if self.M3_used then
+                if par[ PAR.MIX_MIN_LT3 ] > 0 then
+                    local min_LT = par[ PAR.MIX_MIN_LT3 ]
+
+                    if self.LT:get_value() <= min_LT - delta_LT then
+                        self.M3:off()
+                        self.was_low_LT3 = true
+                    elseif self.was_low_LT3 then
+                        if self.LT:get_value() >= min_LT + delta_LT then
+                            self.was_low_LT3 = false
+                        else
+                            self.M3:off()
+                        end
+                    end
+                end
+            else
+                self.M3:off()
+            end
+        end
+    end
+end
+
+add_functionality_for_group( tank_mixer, prg.mix_node_tank1, prg.mix_node_tank2,
+    prg.mix_node_tank3, prg.mix_node_tank6, prg.mix_node_tank7, prg.mix_node_tank8 )
+------------------------------------------------------------------------------
+-- Описание для танков №1-8
+------------------------------------------------------------------------------
+tank_dss = {}
+
+function tank_dss:sync_cooling_mode( res )
+    if res == COOLING_OFF then
+        self.FILL.NEED_COOLING = false
+        self.STORING.NEED_COOLING = false
+        self.OUT.NEED_COOLING = false
+        self.WORK.NEED_COOLING = false
+        self.cooling_mode = false
+
+        self:switch_off_cooling()
+    elseif res == COOLING_ON then
+        self.FILL.NEED_COOLING = true
+        self.STORING.NEED_COOLING = true
+        self.OUT.NEED_COOLING = true
+        self.WORK.NEED_COOLING = true
+        self.cooling_mode = true
+
+        if self:get_mode( self.operations.FILL ) == operation.RUN then
+            self:switch_on_cooling_if_needed( self.FILL )
+        elseif self:get_mode( self.operations.STORING ) == operation.RUN then
+            self:switch_on_cooling_if_needed( self.STORING )
+        elseif self:get_mode( self.operations.OUT ) == operation.RUN then
+            self:switch_on_cooling_if_needed( self.OUT )
+        elseif self:get_mode( self.operations.WORK ) == operation.RUN then
+            self:switch_on_cooling_if_needed( self.WORK )
+        end
+    end
+end
+
+function tank_dss:user_init()
+    for i = 1, 4 do
+        self.reset_before_wash[ #self.reset_before_wash + 1 ] = self.PAR_FLOAT.V_ACCEPTING_CURRENT + i
+    end
+    for i = 1, 4 do
+        self.reset_before_wash[ #self.reset_before_wash + 1 ] = self.PAR_FLOAT.V_NORM_MILK_SET + i - 1
+    end
+
+    self.steps.WASHING_CIP.RUN.START_WASH = 2
+
+    self.steps.STORING = {}
+    self.steps.STORING.RUN = {}
+    self.steps.STORING.RUN.AFTER_RASTV = 2
+
+    self.is_dissolution = false
+    self.was_dissolution = false
+    self.cooling_mode = true
+    self.prev_line_length = 0
+end
+
+function tank_dss:user_check_on_mode( m )
+    if m == self.operations.FILL then
+        if self.cooling_mode then
+            if self.par[ self.PAR_FLOAT.USED_COOLING_FILL ] == 1 then
+                self.FILL.NEED_COOLING = true
+                self.STORING.NEED_COOLING = true
+                self.OUT.NEED_COOLING = true
+                self.WORK.NEED_COOLING = true
+            else
+                self.FILL.NEED_COOLING = false
+                self.STORING.NEED_COOLING = false
+                self.OUT.NEED_COOLING = false
+                self.WORK.NEED_COOLING = false
+            end
+        end
+    end
+
+    return 0
+end
+
+function tank_dss:user_init_operation( m )
+    local par = self.par_float
+    local PAR = self.PAR_FLOAT
+    local m_par = self.mixer.par
+    local M_PAR = self.mixer.PAR
+    local oper = self:get_modes_manager()[ m ]
+
+    if m == self.operations.WASHING_CIP then
+        m_par[ M_PAR.MIX_MIN_LT2 ] = 0
+        m_par[ M_PAR.MIX_MIN_LT3 ] = 0
+        m_par[ M_PAR.MIXER_MASK ] = 123
+        return
+    elseif m == self.operations.FILL then
+        m_par[ M_PAR.MIXER_MASK ] = par[ PAR.MIXER_MASK_FILL ]
+
+    elseif m == self.operations.STORING then
+        m_par[ M_PAR.MIXER_MASK ] = par[ PAR.MIXER_MASK_STORING ]
+
+        if self.was_dissolution then
+            oper:to_step( self.steps.STORING.RUN.AFTER_RASTV )
+        end
+    elseif m == self.operations.OUT then
+        m_par[ M_PAR.MIXER_MASK ] = par[ PAR.MIXER_MASK_OUT ]
+    elseif m == self.operations.WORK then
+        if self.is_dissolution then
+            m_par[ M_PAR.MIXER_MASK ] = par[ PAR.MIXER_MASK_RASTV ]
+        else
+            m_par[ M_PAR.MIXER_MASK ] = par[ PAR.MIXER_MASK_WORK ]
+        end
+    elseif m == self.operations.LEAVENING then
+        m_par[ M_PAR.MIXER_MASK ] = par[ PAR.MIXER_MASK_EXCERPT ]
+    end
+
+    m_par[ M_PAR.MIX_MIN_LT2 ] = par[ PAR.MIX_MIN_LT2 ]
+    m_par[ M_PAR.MIX_MIN_LT3 ] = par[ PAR.MIX_MIN_LT3 ]
+end
+
+function tank_dss:user_evaluate()
+    local par = self.par_float
+    local PAR = self.PAR_FLOAT
+
+    if self:get_mode( self.operations.FILL ) == operation.RUN then
+        if self.prev_line_length ~= #self.in_lines then
+            par[ PAR.MASK_OF_WORKING_LINES ] = par[ PAR.IN_LINE_OBJ_NUMBER ]
+            self.prev_line_length = #self.in_lines
+        end
+    elseif self:get_mode( self.operations.OUT ) == operation.RUN then
+        if self.prev_line_length ~= #self.out_lines then
+            par[ PAR.MASK_OF_WORKING_LINES ] = par[ PAR.OUT_LINE_OBJ_NUMBER ]
+            self.prev_line_length = #self.out_lines
+        end
+    elseif self:get_mode( self.operations.WORK ) == operation.RUN then
+        if self.prev_line_length ~= #self.pump_out_lines + #self.pump_in_lines then
+            if #self.pump_out_lines ~= 0 then
+                par[ PAR.MASK_OF_WORKING_LINES ] = par[ PAR.IN_LINE_OBJ_NUMBER ]
+            elseif #self.pump_in_lines ~= 0 then
+                par[ PAR.MASK_OF_WORKING_LINES ] = par[ PAR.OUT_LINE_OBJ_NUMBER ]
+            end
+            self.prev_line_length = #self.pump_out_lines + #self.pump_in_lines
+        end
+    end
+end
+
+function tank_dss:user_final_operation( m )
+    if m == self.operations.WASHING_CIP then
+        --Восстанавливаем режимы охлаждения перед новой партией
+        self:sync_cooling_mode( COOLING_ON )
+        self.was_dissolution = false
+        self.FILL.OPERATION_AFTER_FILL = self.operations.STORING
+        self.WORK.OPERATION_AFTER = self.operations.STORING
+    end
+
+    self.par_float[ self.PAR_FLOAT.MASK_OF_WORKING_LINES ] = 0
+    self.prev_line_length = 0
+    self.is_dissolution = false
+end
+
+add_functionality_for_group( tank_dss, prg.tank1, prg.tank2, prg.tank3, prg.tank4,
+    prg.tank5, prg.tank6, prg.tank7, prg.tank8 )
+------------------------------------------------------------------------------
+--Синхронизация параметра объёма проталкивания с учётом объёма линии танка
+function sync_push_par_volume( self )
+    local par = self.par_float
+    local PAR = self.PAR_FLOAT
+    local t_par = self.active_dst_tank.par_float
+    local T_PAR = self.active_dst_tank.PAR_FLOAT
+    --Объём проталкивания для линии и линии танка
+    local v = par[ PAR.V_LINE_PUSHING ] + t_par[ T_PAR.V_LINE_TANK ]
+
+    if par[ PAR.V_LINE ] ~= v then
+        par[ PAR.V_LINE ] = v
+    end
+end
+------------------------------------------------------------------------------
+--Описание линии растворения (RA) в Almix
+------------------------------------------------------------------------------
+line_RA = {}
+
+--Переход к нужным шагам, по запросу от Almix и теплообменника.
+--[ 0 ] - Переход в шаг ожидания (отключаем подачу). В начале работы так же отключаем и возврат.
+--[ -1 ] - Переход к проталкиванию.
+--[ ] - Включение циркуляции танка.
+function line_RA:to_next_tank( next_id )
+    local m_mngr = self:get_modes_manager()
+    local m      = self.operations.PUMPING
+    local oper   = m_mngr[ m ]
+    local steps = self.steps.PUMPING.RUN
+    local t = self.active_dst_tank
+
+    if next_id == 0 then
+        oper:to_step( steps.WAITING )
+        if self.is_begin then
+            if self.is_in_drainage then
+                oper:off_extra_step( steps.IN_DRAINAGE )
+            else
+                for dst_idx, tank in pairs( self.dst_tanks ) do
+                    if t == tank then
+                        oper:off_extra_step( steps.IN_TANK + dst_idx - 1 )
+                        break
+                    end
+                end
+            end
+        end
+    elseif next_id == -1 then
+        if self.active_src_tank then
+            if self.almix then
+                self:set_err_msg( "опорожнение Almix завершено, проталкиваем продукт",
+                    m, constants.NONE, tech_object.ERR_DURING_WORK )
+            end
+            self.active_src_tank:remove_pump_out_line( self )
+            self.active_src_tank = nil
+
+            self.par[ self.PUMPING.SRC ] = -1
+            self.prev_src = -1
+            oper:to_step( self.steps.PUMPING.RUN.OUT_WATER )
+            self.start_cnt_val = self.product_CTR:get_abs_quantity()
+        end
+
+        if self.is_begin then
+            if self.is_in_drainage then
+                self.start_cnt_val = self.product_CTR:get_abs_quantity()
+                oper:on_extra_step( steps.IN_DRAINAGE )
+            else
+                for dst_idx, tank in pairs( self.dst_tanks ) do
+                    if t == tank then
+                        oper:on_extra_step( steps.IN_TANK + dst_idx - 1 )
+                        break
+                    end
+                end
+            end
+            self.is_begin = false
+        else
+            --Устанавливаем следующую операцию для операций танка:
+            --После растворения, наполнения или достижения температуры,
+            --если было растворение, переходим к выдерживанию
+            t.was_dissolution = true
+            t.FILL.OPERATION_AFTER_FILL = t.operations.LEAVENING
+            t.WORK.OPERATION_AFTER = t.operations.LEAVENING
+        end
+    else
+
+        for src_idx, tank in pairs( self.src_tanks ) do
+            if self.active_src_tank == tank then
+                oper:to_step( steps.OUT_TANK + src_idx - 1 )
+                break
+            end
+        end
+
+        if self.is_begin then
+            if self.is_in_drainage then
+                self.start_cnt_val = self.product_CTR:get_abs_quantity()
+                oper:on_extra_step( steps.IN_DRAINAGE )
+            else
+                for dst_idx, tank in pairs( self.dst_tanks ) do
+                    if t == tank then
+                        oper:on_extra_step( steps.IN_TANK + dst_idx - 1 )
+                        break
+                    end
+                end
+            end
+            self.is_begin = false
+        end
+    end
+end
+
+function line_RA:user_init()
+    --Добавляем поле с объектом Almix на линии
+    --Добавляем объекту Almix поле с текущей линией
+    if self.n == 1 then
+        self.almix = prg.user_object_almix1
+    else
+        self.almix = prg.user_object_almix2
+    end
+    self.almix.line_circ = self
+
+    self.line_mode_request = false
+end
+
+function line_RA:user_check_on_mode( m )
+    self.line_mode_request = true
+    local res = self.almix:check_operation_on( m )
+
+    if res > 0 then
+        self.line_mode_request = false
+        return res
+    end
+
+    if m == self.operations.PUMPING then
+        local src = self.par[ self.PUMPING.SRC ]
+        local dst = self.par[ self.PUMPING.DST ]
+        local min_l = 600                   --Объём Almix
+
+        if self.par[ self.PAR_FLOAT.WATER_FLAG ] == self.WATER_FLAG_YES then
+            min_l = min_l + self.par[ self.PAR_FLOAT.V_LINE_FILLING ] * 2
+        end
+
+        for src_idx, tank in pairs( self.src_tanks ) do
+            if tank.n == src then
+                if not tank.LS_down:is_active() then
+                    self:set_err_msg( "Танк №"..tank.n.. " пуст!", m, constants.NONE,
+                        tech_object.ERR_CANT_ON )
+                    return 1
+                elseif tank.LT:get_volume() < min_l then
+                    --Учитываем объём линии + запас на растворение 100% от объёма линии + объём Almix
+                    self:set_err_msg( "Текущая масса < порога для включения "..min_l.." кг", m, constants.NONE,
+                        tech_object.ERR_CANT_ON )
+                    return 1
+                elseif tank:get_mode( tank.operations.WORK ) == operation.RUN then
+                    self:set_err_msg( "Уже активна операция 'Работа' танка №"..tank.n,
+                        m, constants.NONE, tech_object.ERR_CANT_ON )
+                    return 1
+                end
+                tank.is_dissolution = true
+            end
+        end
+    end
+
+    return 0
+end
+
+function line_RA:user_init_operation( m )
+    self.almix:set_mode( m, operation.RUN )
+
+    if m == self.operations.PUMPING then
+        self.par[ self.PAR_FLOAT.V_LINE ] = self.par[ self.PAR_FLOAT.V_LINE_FILLING ]
+
+        self.is_begin = true
+        self:to_next_tank( 0 )
+    end
+end
+
+function line_RA:user_evaluate()
+    local m = self.operations.PUMPING
+    local a_step = self:get_modes_manager()[ m ]:active_step()
+
+    if self:get_operation_state( m ) == operation.RUN then
+        if a_step == self.steps.PUMPING.RUN.OUT_WATER then
+            sync_push_par_volume( self )
+        end
+    end
+end
+
+function line_RA:user_final_operation( m )
+    self.almix:off()
+    self.line_mode_request = false
+    self.is_begin = false
+end
+
+add_functionality_for_group( line_RA, prg.line_pumping_ra1, prg.line_pumping_ra2 )
+------------------------------------------------------------------------------
+-- Описание линии с теплообменником
+------------------------------------------------------------------------------
+line_term = {}
+
+--Синхронизация параметров температуры из параметров танка
+function line_term:sync_temperature_par( m, dst )
+    for dst_idx, tank in pairs( self.dst_tanks ) do
+        if tank.n == dst then
+            local t_par = tank.par_float
+            local T_PAR = tank.PAR_FLOAT
+
+            if m == self.term.operations.HEATING then
+                self.par[ self.PAR_FLOAT.WORK_TEMPERATURE ] = t_par[ T_PAR.HEAT_TEMP_WORK ]
+            elseif m == self.term.operations.COOLING then
+                self.par[ self.PAR_FLOAT.WORK_TEMPERATURE ] = t_par[ T_PAR.COOL_TEMP_WORK ]
+            end
+            self.prev_dst_temp = dst
+            self.is_get_temp = false
+            return
+        end
+    end
+end
+
+function line_term:user_init()
+    --Добавляем поле с объектом теплообменника на линии
+    --Добавляем объекту теплообменник поле с текущей линией
+    if self.n == 11 then
+        self.term = prg.user_object_heat_excr1
+    else
+        self.term = prg.user_object_heat_excr2
+    end
+    self.term.line_circ = self
+
+    self.QT = QT( "R"..self.n.."QT1" )
+    self.TE = TE( 'HEAT_EXCR'..( self.n - 10 )..'TE3' )
+    self.signal_column = HLA( 'MCC1HLA1' )
+
+    --флаг активной работы по линии
+    self.line_ready = false
+    self.prev_dst_temp = 0
+end
+
+function line_term:user_check_on_mode( m )
+    if m == self.operations.PUMPING then
+        local src = self.par[ self.PUMPING.SRC ]
+        local dst = self.par[ self.PUMPING.DST ]
+
+        --Проверка на наличие активной операции работа в танке dst и src
+        --Если не активна работа в танке включаем операцию перекачивания,
+        --во время работы не даёт возможность сменить активные танки.
+        for src_idx, tank in pairs( self.src_tanks ) do
+            if tank.n == src then
+                if tank:get_mode( tank.operations.WORK ) == operation.RUN then
+                    self:set_err_msg( "Уже активна операция 'Работа' танка №"..tank.n,
+                        m, constants.NONE, tech_object.ERR_CANT_ON )
+                    return 1
+                end
+            end
+        end
+
+        for dst_idx, tank in pairs( self.dst_tanks ) do
+            if tank.n == dst then
+                if tank:get_mode( tank.operations.WORK ) == operation.RUN then
+                    self:set_err_msg( "Уже активна операция 'Работа' танка №"..tank.n,
+                        m, constants.NONE, tech_object.ERR_CANT_ON )
+                    return 1
+                end
+            end
+        end
+    end
+
+    return 0
+end
+
+function line_term:user_init_operation( m )
+    local par = self.par_float
+    local PAR = self.PAR_FLOAT
+
+    if m == self.operations.PUMPING then
+        local tm_par = self.term.par_float
+        local TM_PAR = self.term.PAR_FLOAT
+        self.timer_stabilization = get_millisec()
+        self.is_get_temp = false
+        self.line_ready = true
+        par[ PAR.V_LINE ] = par[ PAR.V_LINE_FILLING ]
+
+        --Синхронизация параметров для теплообменника
+        if self.term.a_mode == self.term.operations.HEATING then
+            self.active_dst_tank:sync_cooling_mode( COOLING_OFF )
+
+            --Если циркулируем в одном танке добавляем температуру нагрева в потоке
+            if self.active_src_tank == self.active_dst_tank then
+                tm_par[ TM_PAR.HEAT_TEMPERATURE ] = par[ PAR.WORK_TEMPERATURE ] +
+                    par[ PAR.TE_HEAT_DELTA]
+            else
+                tm_par[ TM_PAR.HEAT_TEMPERATURE ] = par[ PAR.WORK_TEMPERATURE ]
+            end
+        elseif self.term.a_mode == self.term.operations.COOLING then
+            self.active_dst_tank:sync_cooling_mode( COOLING_ON )
+            --Если циркулируем в одном танке добавляем температуру нагрева в потоке
+            if self.active_src_tank == self.active_dst_tank then
+                tm_par[ TM_PAR.COOL_TEMPERATURE ] = par[ PAR.WORK_TEMPERATURE ] - par[ PAR.TE_COOLING_DELTA ]
+            else
+                tm_par[ TM_PAR.COOL_TEMPERATURE ] = par[ PAR.WORK_TEMPERATURE ]
+            end
+        end
+    end
+end
+
+function line_term:user_evaluate()
+    local m = self.operations.PUMPING
+    local par = self.par_float
+    local PAR = self.PAR_FLOAT
+    local dst = par[ self.PUMPING.DST ]
+    local term_mode = self.term.a_mode
+
+    if term_mode then
+        if self.prev_dst_temp ~= dst then
+            self:sync_temperature_par( term_mode, dst )
+        end
+    elseif self.prev_dst_temp ~= 0 then
+        self.prev_dst_temp = 0
+    end
+
+    if self:get_mode( m ) == operation.RUN then
+        local oper = self:get_modes_manager()[ m ]
+        local a_step = oper:active_step()
+        local tm_par = self.term.par_float
+        local TM_PAR = self.term.PAR_FLOAT
+
+        if term_mode then
+            self:sync_node_state( self.term, term_mode, m )
+        end
+
+        if self:get_operation_state( m ) == operation.RUN then
+            if self.is_in_drainage then
+                if par[ PAR.WATER_FLAG ] == self.WATER_FLAG_YES then
+                    local sign = 1
+                    local val = par[ PAR.CONCENTRATION ] +
+                        sign * par[ PAR.DELTA_CONCENTRATION ]
+
+                    if self.QT:get_value() > val then
+                        oper:switch_active_extra_step( self.steps.PUMPING.RUN.IN_DRAINAGE,
+                            self.steps.PUMPING.RUN.IN_TANK + dst - 1 )
+                        par[ PAR.WATER_FLAG ] = self.WATER_FLAG_NO
+                    end
+                elseif par[ PAR.WATER_FLAG ] == self.WATER_FLAG_NO then
+                    local sign = -1
+                    local val = par[ PAR.CONCENTRATION ] +
+                        sign * par[ PAR.DELTA_CONCENTRATION ]
+
+                    if self.QT:get_value() < val then
+                        oper:switch_active_extra_step( self.steps.PUMPING.RUN.IN_TANK + dst - 1,
+                            self.steps.PUMPING.RUN.IN_DRAINAGE )
+                        par[ PAR.WATER_FLAG ] = self.WATER_FLAG_YES
+                    end
+                end
+            end
+
+            if a_step == self.steps.PUMPING.RUN.OUT_WATER then
+                self.term:off()
+                sync_push_par_volume( self )
+            else
+                local dst_tank = self.active_dst_tank
+                local src_tank = self.active_src_tank
+                local is_circulation = false
+
+                if src_tank == dst_tank then
+                    is_circulation = true
+                end
+
+                if term_mode == self.term.operations.HEATING then
+                    local t = par[ PAR.WORK_TEMPERATURE ]
+                    local sum = t
+                    if not self.is_get_temp and is_circulation then
+                        sum = sum + par[ PAR.TE_HEAT_DELTA ]
+                    end
+
+                    if tm_par[ TM_PAR.HEAT_TEMPERATURE ] ~= sum then
+                        tm_par[ TM_PAR.HEAT_TEMPERATURE ] = sum
+                    end
+
+                    if dst_tank.TE:get_value() >= t and is_circulation then
+                        if not self.is_get_temp then
+                            self.is_get_temp = true
+                            self.timer_stabilization = get_millisec()
+                            self:set_err_msg( "достигнута температура "..t.." град.C в танке №"
+                            ..dst_tank.n, m, constants.NONE, tech_object.ERR_DURING_WORK )
+                        elseif get_delta_millisec( self.timer_stabilization ) > par[ PAR.CHECK_TEMP ] * constants.SEC_TO_MSEC then
+                            self:set_err_msg( "нагрев продукта в танке №"..dst_tank.n..
+                                " завершён, проталкиваем продукт", m, constants.NONE, tech_object.ERR_DURING_WORK )
+                            par[ self.PUMPING.SRC ] = -1
+                        end
+                    end
+                elseif term_mode == self.term.operations.COOLING then
+                    local t = par[ PAR.WORK_TEMPERATURE ]
+                    local sum = t
+                    if not self.is_get_temp and is_circulation then
+                        sum = sum - par[ PAR.TE_COOLING_DELTA ]
+                        if sum < 3 then
+                            sum = 3
+                        end
+                    end
+
+                    if tm_par[ TM_PAR.COOL_TEMPERATURE ] ~= sum then
+                        tm_par[ TM_PAR.COOL_TEMPERATURE ] = sum
+                    end
+
+                    if dst_tank.TE:get_value() <= t and is_circulation then
+                        if not self.is_get_temp then
+                            self.is_get_temp = true
+                            self.timer_stabilization = get_millisec()
+                            self:set_err_msg( "достигнута температура "..t.." град.C в танке №"
+                            ..dst_tank.n, m, constants.NONE, tech_object.ERR_DURING_WORK )
+                        elseif get_delta_millisec( self.timer_stabilization ) > par[ PAR.CHECK_TEMP ] * constants.SEC_TO_MSEC then
+                            self:set_err_msg( "охлаждение продукта в танке №"..dst_tank.n..
+                                " завершено, проталкиваем продукт", m, constants.NONE, tech_object.ERR_DURING_WORK )
+                            par[ self.PUMPING.SRC ] = -1
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+function line_term:user_final_operation( m )
+    if m == self.operations.PUMPING then
+        self.term:off()
+        self.line_ready = false
+        self.prev_dst_temp = 0
+    end
+end
+
+add_functionality_for_group( line_term, prg.line_pumping_r11, prg.line_pumping_r12 )
+------------------------------------------------------------------------------
+-- Описание линии наполнения с двумя операциями наполнения по R11, R12
+------------------------------------------------------------------------------
+line_fill = {}
+
+function line_fill:user_init()
+    self.FILL.FILL1 = 2
+    self.FILL.FILL2 = 3
+    self.FILL.LINE_TM =
+        {
+        [ self.FILL.FILL1 ] = prg.line_pumping_r11,
+        [ self.FILL.FILL2 ] = prg.line_pumping_r12,
+        }
+
+    self.signal_column = HLA( 'MCC1HLA1' )
+end
+
+function line_fill:user_check_on_mode( m, show_error )
+    if m > self.operations.WASHING_CIP then
+        if m ~= self.operations.FILL then
+            self.operations.FILL = m
+            local res = self:check_on_mode( m, show_error )
+
+            if res > 0 then
+                return res
+            end
+        else
+            local line_tm = self.FILL.LINE_TM[ m ]
+            local res = 0
+
+            if line_tm.par_float[ line_tm.PAR_FLOAT.WATER_FLAG ] == self.WATER_FLAG_NO then
+                self:set_err_msg( "в линии R1" .. ( m - 1 ) .. " продукт",
+                    m, constants.NONE, tech_object.ERR_CANT_ON )
+                return 1
+            end
+
+            if self.par[ self.PAR_FLOAT.FLAG_OF_MODE] == HEATING then
+                res = line_tm.term:check_operation_on( HEATING )
+            elseif self.par[ self.PAR_FLOAT.FLAG_OF_MODE] == COOLING then
+                res = line_tm.term:check_operation_on( COOLING )
+            end
+
+            if res > 0 then
+                return res
+            end
+
+            self.QT = line_tm.QT
+            self.product_CTR = line_tm.product_CTR
+        end
+    end
+
+    return 0
+end
+
+function line_fill:user_init_operation( m )
+    if m == self.operations.FILL then
+        local line_tm = self.FILL.LINE_TM[ m ]
+        local tm_par = line_tm.term.par_float
+        local TM_PAR = line_tm.term.PAR_FLOAT
+        self.start_abs_value = self.product_CTR:get_abs_quantity()
+        self.prev_tm_flag = false
+
+        if self.par[ self.PAR_FLOAT.FLAG_OF_MODE ] == HEATING then
+            line_tm.term:set_mode( HEATING, operation.RUN )
+            tm_par[ TM_PAR.HEAT_TEMPERATURE ] = self.par[ self.PAR_FLOAT.FILL_TEMPERATURE ]
+        elseif self.par[ self.PAR_FLOAT.FLAG_OF_MODE ] == COOLING then
+            line_tm.term:set_mode( COOLING, operation.RUN )
+            tm_par[ TM_PAR.COOL_TEMPERATURE ] = self.par[ self.PAR_FLOAT.FILL_TEMPERATURE ]
+        else
+            line_tm.term:off()
+        end
+    end
+end
+
+function line_fill:user_evaluate()
+    local par = self.par_float
+    local PAR = self.PAR_FLOAT
+    local m = self.operations.FILL
+
+    if self:get_mode( m ) == operation.RUN then
+        local line_tm = self.FILL.LINE_TM[ m ]
+        local tm_par = line_tm.term.par_float
+        local TM_PAR = line_tm.term.PAR_FLOAT
+        local oper = self:get_modes_manager()[ m ]
+
+        if line_tm.term.a_mode then
+            self:sync_node_state( line_tm.term, line_tm.term.a_mode, m )
+            if line_tm.term.a_mode ~= par[ PAR.FLAG_OF_MODE ] then
+                par[ PAR.FLAG_OF_MODE ] = line_tm.term.a_mode
+            end
+        elseif par[ PAR.FLAG_OF_MODE ] ~= 0 then
+            par[ PAR.FLAG_OF_MODE ] = 0
+        end
+
+        if self:get_operation_state( m ) == operation.RUN then
+            if not line_tm.line_ready and PAR.START_TM_VOLUME then
+                local dv = self.product_CTR:get_abs_quantity() -
+                    self.start_abs_value
+                if par[ PAR.WATER_FLAG ] == self.WATER_FLAG_NO or
+                    dv >= par[ PAR.START_TM_VOLUME ] then
+                    line_tm.line_ready = true
+                end
+            else
+                line_tm.line_ready = true
+            end
+
+            if par[ PAR.FLAG_OF_MODE ] == HEATING then
+                if self.active_tank and self.active_tank.cooling_mode then
+                    self.active_tank:sync_cooling_mode( COOLING_OFF )
+                end
+                if tm_par[ TM_PAR.HEAT_TEMPERATURE ] ~= par[ PAR.FILL_TEMPERATURE ] then
+                    tm_par[ TM_PAR.HEAT_TEMPERATURE ] = par[ PAR.FILL_TEMPERATURE ]
+                end
+            elseif par[ PAR.FLAG_OF_MODE ] == COOLING then
+                if self.active_tank and not self.active_tank.cooling_mode then
+                    self.active_tank:sync_cooling_mode( COOLING_ON )
+                end
+                if tm_par[ TM_PAR.COOL_TEMPERATURE ] ~= par[ PAR.FILL_TEMPERATURE ] then
+                    tm_par[ TM_PAR.COOL_TEMPERATURE ] = par[ PAR.FILL_TEMPERATURE ]
+                end
+            end
+
+            if not self.prev_tm_flag and oper:active_step() >= self.steps.FILL.RUN.IN_TANK then
+                self.prev_tm_flag = true
+                line_tm.par_float[ line_tm.PAR_FLOAT.DES_FLAG ] = constants.FLAG_OBJ_PRODUCT
+            end
+        end
+
+        local FQT = line_tm.product_CTR
+        if self == prg.line_in_m18 then
+            __M18TE3:set_value( line_tm.TE:get_value() )
+            __M18QT1:set_value( line_tm.QT:get_value() )
+            M18FQT1:eval( FQT:get_quantity(), FQT:get_quantity(), FQT:get_flow() )
+        elseif self == prg.line_in_pm2 then
+            __PM2TE3:set_value( line_tm.TE:get_value() )
+            __PM2QT1:set_value( line_tm.QT:get_value() )
+            PM2FQT1:eval( FQT:get_quantity(), FQT:get_quantity(), FQT:get_flow() )
+        elseif self == prg.line_in_rc3 then
+            __RC3TE3:set_value( line_tm.TE:get_value() )
+            __RC3QT1:set_value( line_tm.QT:get_value() )
+            RC3FQT1:eval( FQT:get_quantity(), FQT:get_quantity(), FQT:get_flow() )
+        end
+    end
+end
+
+function line_fill:user_final_operation( m )
+    if m == self.operations.WASHING_CIP then
+        if self == prg.line_in_m18 then
+            __M18QT1:set_value( 0 )
+            M18FQT1:reset()
+            M18FQT1:abs_reset()
+        elseif self == prg.line_in_pm2 then
+            __PM2QT1:set_value( 0 )
+            PM2FQT1:reset()
+            PM2FQT1:abs_reset()
+        elseif self == prg.line_in_rc3 then
+            __RC3QT1:set_value( 0 )
+            RC3FQT1:reset()
+            RC3FQT1:abs_reset()
+        end
+    elseif m == self.operations.FILL then
+        local line_tm = self.FILL.LINE_TM[ m ]
+        line_tm.line_ready = false
+        self.par[ self.PAR_FLOAT.FLAG_OF_MODE ] = 0
+        local FQT = line_tm.product_CTR
+
+        if self == prg.line_in_m18 then
+            __M18TE3:set_value( 0 )
+            M18FQT1:eval( FQT:get_quantity(), FQT:get_quantity(), 0 )
+        elseif self == prg.line_in_pm2 then
+            __PM2TE3:set_value( 0 )
+            PM2FQT1:eval( FQT:get_quantity(), FQT:get_quantity(), 0 )
+        elseif self == prg.line_in_rc3 then
+            __RC3TE3:set_value( 0 )
+            RC3FQT1:eval( FQT:get_quantity(), FQT:get_quantity(), 0 )
+        end
+
+        self.product_CTR = STUB()
+        line_tm.term:off()
+    end
+end
+
+add_functionality_for_group( line_fill, prg.line_in_m18, prg.line_in_pm2, prg.line_in_rc3 )
+------------------------------------------------------------------------------
+-- Описание линий выдачи R21-R24 на стерилизаторы
+------------------------------------------------------------------------------
+lines_out = {}
+
+function lines_out:user_init()
+    self.OUT.NUM_STERILIZATOR = AI( 'R'..self.n..'AI11' )
+    self.signal_column = HLA( 'MCC1HLA1' )
+end
+
+function lines_out:user_check_on_mode( m )
+    if m == self.operations.OUT then
+        local NUM_STERIL = self.OUT.NUM_STERILIZATOR:get_value()
+
+        --Если существует параметр V_LINE_STERIL..номер стерилизатора из сигнала
+        if self.PAR_FLOAT[ 'V_LINE_STERIL'..NUM_STERIL ] then
+            self.par[ self.PAR_FLOAT.V_LINE ] = self.par[ self.PAR_FLOAT[ 'V_LINE_STERIL'..NUM_STERIL ] ]
+        else
+            self:set_err_msg( "приёмник не готов", m, constants.NONE,
+                tech_object.ERR_CANT_ON )
+            return 1
+        end
+    end
+
+    return 0
+end
+
+add_functionality_for_group( lines_out, prg.line_out_r21, prg.line_out_r22,
+    prg.line_out_r23, prg.line_out_r24 )
+------------------------------------------------------------------------------
+-- Описание мастера
+------------------------------------------------------------------------------
+
+function prg.master1:delay_init()
+    local PAR = self.PAR_FLOAT
+    self.FILL1 = 2
+    self.FILL2 = 3
+
+    self:add_unit_batch( 1, prg.tank1 )
+    self:add_unit_batch( 2, prg.tank2 )
+    self:add_unit_batch( 3, prg.tank3 )
+    self:add_unit_batch( 4, prg.tank4 )
+    self:add_unit_batch( 5, prg.tank5 )
+    self:add_unit_batch( 6, prg.tank6 )
+    self:add_unit_batch( 7, prg.tank7 )
+    self:add_unit_batch( 8, prg.tank8 )
+
+    self.operations =
+        {
+        FILL_GROUP =
+            {
+            V1 = 13,
+
+            M18_R11 = 14,
+            M18_R12 = 15,
+
+            PM2_R11 = 17,
+            PM2_R12 = 18,
+
+            RC3_R11 = 20,
+            RC3_R12 = 21,
+            },
+        OUT_GROUP =
+            {
+            R21 = 26,
+            R22 = 27,
+            R23 = 28,
+            R24 = 29,
+            },
+        }
+
+    self.fill_group_info =
+        {
+        [ self.operations.FILL_GROUP.V1 ] =
+            {
+            --Тип продукта
+            --Линия, по которой идет наполнение.
+            --№ параметров танков очереди.
+            PROD_TYPE = 4,           --Вода
+            line = prg.line_in_v1,
+            SOURCE_TANK_PARAM_QUEUE =
+                {
+                PAR.ENQ_V1_TANK1, PAR.ENQ_V1_TANK2, PAR.ENQ_V1_TANK3,
+                PAR.ENQ_V1_TANK4, PAR.ENQ_V1_TANK5,
+                },
+            },
+        [ self.operations.FILL_GROUP.M18_R11 ] =
+            {
+            --Тип продукта
+            --Линия, по которой идет наполнение.
+            --№ параметров танков очереди.
+            PROD_TYPE = 1,           --Нормализованное молоко
+            line = prg.line_in_m18,
+            FQT = FQT( "R11FQT1" ),
+            LINE_FILL = self.FILL1,
+            QT = QT( "R11QT1" ),
+            SOURCE_TANK_PARAM_QUEUE =
+                {
+                PAR.ENQ_M18_TANK1, PAR.ENQ_M18_TANK2, PAR.ENQ_M18_TANK3,
+                PAR.ENQ_M18_TANK4, PAR.ENQ_M18_TANK5,
+                },
+            },
+        [ self.operations.FILL_GROUP.M18_R12 ] =
+            {
+            --Тип продукта
+            --Линия, по которой идет наполнение.
+            --№ параметров танков очереди.
+            PROD_TYPE = 1,           --Нормализованное молоко
+            line = prg.line_in_m18,
+            FQT = FQT( "R12FQT1" ),
+            LINE_FILL = self.FILL2,
+            QT = QT( "R12QT1" ),
+            SOURCE_TANK_PARAM_QUEUE =
+                {
+                PAR.ENQ_M18_TANK1, PAR.ENQ_M18_TANK2, PAR.ENQ_M18_TANK3,
+                PAR.ENQ_M18_TANK4, PAR.ENQ_M18_TANK5,
+                },
+            },
+        [ self.operations.FILL_GROUP.PM2_R11 ] =
+            {
+            --Тип продукта
+            --Линия, по которой идет наполнение.
+            --№ параметров танков очереди.
+            PROD_TYPE = 2,           --Обезжиренное молоко
+            line = prg.line_in_pm2,
+            FQT = FQT( "R11FQT1" ),
+            LINE_FILL = self.FILL1,
+            QT = QT( "R11QT1" ),
+            SOURCE_TANK_PARAM_QUEUE =
+                {
+                PAR.ENQ_PM2_TANK1, PAR.ENQ_PM2_TANK2, PAR.ENQ_PM2_TANK3,
+                PAR.ENQ_PM2_TANK4, PAR.ENQ_PM2_TANK5,
+                },
+            },
+        [ self.operations.FILL_GROUP.PM2_R12 ] =
+            {
+            --Тип продукта
+            --Линия, по которой идет наполнение.
+            --№ параметров танков очереди.
+            PROD_TYPE = 2,           --Обезжиренное молоко
+            line = prg.line_in_pm2,
+            FQT = FQT( "R12FQT1" ),
+            LINE_FILL = self.FILL2,
+            QT = QT( "R12QT1" ),
+            SOURCE_TANK_PARAM_QUEUE =
+                {
+                PAR.ENQ_PM2_TANK1, PAR.ENQ_PM2_TANK2, PAR.ENQ_PM2_TANK3,
+                PAR.ENQ_PM2_TANK4, PAR.ENQ_PM2_TANK5,
+                },
+            },
+        [ self.operations.FILL_GROUP.RC3_R11 ] =
+            {
+            --Тип продукта
+            --Линия, по которой идет наполнение.
+            --№ параметров танков очереди.
+            PROD_TYPE = 3,           --Сливки
+            line = prg.line_in_rc3,
+            FQT = FQT( "R11FQT1" ),
+            LINE_FILL = self.FILL1,
+            QT = QT( "R11QT1" ),
+            SOURCE_TANK_PARAM_QUEUE =
+                {
+                PAR.ENQ_RC3_TANK1, PAR.ENQ_RC3_TANK2, PAR.ENQ_RC3_TANK3,
+                PAR.ENQ_RC3_TANK4, PAR.ENQ_RC3_TANK5,
+                },
+            },
+        [ self.operations.FILL_GROUP.RC3_R12 ] =
+            {
+            --Тип продукта
+            --Линия, по которой идет наполнение.
+            --№ параметров танков очереди.
+            PROD_TYPE = 3,           --Сливки
+            line = prg.line_in_rc3,
+            FQT = FQT( "R12FQT1" ),
+            LINE_FILL = self.FILL2,
+            QT = QT( "R12QT1" ),
+            SOURCE_TANK_PARAM_QUEUE =
+                {
+                PAR.ENQ_RC3_TANK1, PAR.ENQ_RC3_TANK2, PAR.ENQ_RC3_TANK3,
+                PAR.ENQ_RC3_TANK4, PAR.ENQ_RC3_TANK5,
+                },
+            },
+        }
+
+    self.out_group_info =
+        {
+        [ self.operations.OUT_GROUP.R21 ] =
+            {
+            line = prg.line_out_r21,
+            DESTINY_TANK_PARAM_QUEUE =
+                {
+                PAR.ENQ_R21_TANK1, PAR.ENQ_R21_TANK2, PAR.ENQ_R21_TANK3,
+                PAR.ENQ_R21_TANK4, PAR.ENQ_R21_TANK5,
+                },
+            },
+        [ self.operations.OUT_GROUP.R22 ] =
+            {
+            line = prg.line_out_r22,
+            DESTINY_TANK_PARAM_QUEUE =
+                {
+                PAR.ENQ_R22_TANK1, PAR.ENQ_R22_TANK2, PAR.ENQ_R22_TANK3,
+                PAR.ENQ_R22_TANK4, PAR.ENQ_R22_TANK5,
+                },
+            },
+        [ self.operations.OUT_GROUP.R23 ] =
+            {
+            line = prg.line_out_r23,
+            DESTINY_TANK_PARAM_QUEUE =
+                {
+                PAR.ENQ_R23_TANK1, PAR.ENQ_R23_TANK2, PAR.ENQ_R23_TANK3,
+                PAR.ENQ_R23_TANK4, PAR.ENQ_R23_TANK5,
+                },
+            },
+        [ self.operations.OUT_GROUP.R24 ] =
+            {
+            line = prg.line_out_r24,
+            DESTINY_TANK_PARAM_QUEUE =
+                {
+                PAR.ENQ_R24_TANK1, PAR.ENQ_R24_TANK2, PAR.ENQ_R24_TANK3,
+                PAR.ENQ_R24_TANK4, PAR.ENQ_R24_TANK5,
+                },
+            },
+        }
+
+    self.pumping_group_info =
+        {
+        pumping_lines =
+            {
+            prg.line_pumping_ra1, prg.line_pumping_ra2,
+            },
+        }
+end
+
+function prg.master1:user_check_on_mode( m )
+    if m == self.operations.FILL_GROUP.M18_R11 or m == self.operations.FILL_GROUP.PM2_R11 or
+        m == self.operations.FILL_GROUP.RC3_R11 then
+        local info = self.fill_group_info[ m ]
+        info.line.operations.FILL = self.FILL1
+    elseif m == self.operations.FILL_GROUP.M18_R12 or m == self.operations.FILL_GROUP.PM2_R12 or
+        m == self.operations.FILL_GROUP.RC3_R12 then
+        local info = self.fill_group_info[ m ]
+        info.line.operations.FILL = self.FILL2
+    end
+end
+
+function prg.master1:user_init_operation( m )
+    for _, mod in pairs( self.operations.FILL_GROUP ) do
+        if m == mod then
+            local info = self.fill_group_info[ m ]
+            info.prev_FQT_value = info.FQT:get_abs_quantity()
+            break
+        end
+    end
+end
+
+function prg.master1:sync_temperature_par( m )
+    local info = self.fill_group_info[ m ]
+    local l_par = info.line.par
+    local L_PAR = info.line.PAR_FLOAT
+    local tank_n = self.par[ info.SOURCE_TANK_PARAM_QUEUE[ 1 ] ]
+    local term_mode = l_par[ L_PAR.FLAG_OF_MODE ]
+
+    if tank_n ~= info.prev_tank_n or term_mode ~= info.prev_term_mode then
+        for _, tank in pairs( info.line.attached_objects ) do
+            if tank.n == tank_n then
+                if term_mode == HEATING then
+                    l_par[ L_PAR.FILL_TEMPERATURE ] = tank.par[ tank.PAR_FLOAT.HEAT_TEMP_FILL ]
+                elseif term_mode == COOLING then
+                    l_par[ L_PAR.FILL_TEMPERATURE ] = tank.par[ tank.PAR_FLOAT.COOL_TEMP_FILL ]
+                end
+                break
+            end
+        end
+        info.prev_tank_n = tank_n
+        info.prev_term_mode = term_mode
+    end
+end
+
+function prg.master1:check_fill_with_volume( m )
+    local par = self.par_float
+    local info = self.fill_group_info[ m ]
+
+    if self:get_operation_state( m ) == operation.RUN then
+        local oper = info.line:get_modes_manager()[ info.LINE_FILL ]
+        local a_step = oper:active_step()
+
+        if a_step >= info.line.steps.FILL.RUN.IN_TANK and
+            info.line.active_tank then
+            if info.PROD_TYPE then
+                local tank = info.line.active_tank
+                local idx = info.ACTIVE_TANK_CURRENT_VOL_PAR_N + info.PROD_TYPE
+                local dv = info.line:get_total_line_volume()
+                local set_v = 0
+                tank.par_float[ idx ] = tank.par_float[ idx ] +
+                    info.FQT:get_abs_quantity() - info.prev_FQT_value
+
+                if info.PROD_TYPE == 1 then
+                    set_v = tank.par_float[ tank.PAR_FLOAT.V_NORM_MILK_SET ]
+                elseif info.PROD_TYPE == 2 then
+                    set_v = tank.par_float[ tank.PAR_FLOAT.V_NONFAT_MILK_SET ]
+                elseif info.PROD_TYPE == 3 then
+                    set_v = tank.par_float[ tank.PAR_FLOAT.V_CREAM_SET ]
+                elseif info.PROD_TYPE == 4 then
+                    set_v = tank.par_float[ tank.PAR_FLOAT.V_WATER_SET ]
+                end
+
+                if par[ info.current_tank_idx + 1 ] ~= -1 and tank.par_float[ idx ] >= set_v then
+                    self:to_next_dst_tank( m, "("..tank.par_float[ idx ].." л)" )
+                elseif par[ info.current_tank_idx + 1 ] == -1 and
+                    tank.par_float[ idx ] >= set_v - dv then
+                    local extra_step = info.line.steps.FILL.RUN.PRODUCT_PUSH
+
+                    if not oper:is_active_extra_step( extra_step ) then
+                        oper:on_extra_step( extra_step )
+                        self:set_err_msg( "для танка №"..par[ info.current_tank_idx ]..
+                            " осталось "..dv.." литров, переход к проталкиванию продукта",
+                            m, constants.NONE, tech_object.ERR_DURING_WORK )
+
+                        info.start_extra_push_v = info.FQT:get_abs_quantity()
+                    end
+                end
+            end
+        end
+        info.prev_FQT_value = info.FQT:get_abs_quantity()
+    end
+end
+
+function prg.master1:user_evaluate()
+    local lines = self.pumping_group_info.pumping_lines
+
+    for _, line in pairs( lines ) do
+        local m = line.operations.PUMPING
+        local l_par = line.par_float
+        local L_PAR = line.PAR_FLOAT
+        local was_changed = false
+
+        if line:get_mode( m ) == operation.RUN then
+            if line.prev_dst ~= l_par[ line.PUMPING.DST ] then
+                l_par[ line.PUMPING.DST ] = line.prev_dst
+                was_changed = true
+            end
+
+            if line.prev_dst ~= l_par[ line.PUMPING.SRC ] and l_par[ line.PUMPING.SRC ] ~= -1 then
+                l_par[ line.PUMPING.SRC ] = line.prev_dst
+                was_changed = true
+            elseif line.prev_src ~= l_par[ line.PUMPING.SRC ] and l_par[ line.PUMPING.SRC ] == -1 then
+                -- Для Almix, если номер источника [-1] - включаем опорожнение.
+                if line.almix then
+                    line.almix:go_to_emptying( m )
+                end
+            end
+
+            if was_changed then
+                line:set_err_msg( "нельзя изменить номер танка - активна операция", m,
+                    constants.NONE, tech_object.ERR_DURING_WORK )
+            end
+        else
+            --В мониторе задаём номер танка dst, отдельно кнопка проталкивания (src = -1),
+            --при задании номера танка синхронизируем
+            if l_par[ line.PUMPING.DST ] ~= l_par[ line.PUMPING.SRC ] then
+                l_par[ line.PUMPING.SRC ] = l_par[ line.PUMPING.DST ]
+            end
+        end
+    end
+
+    for _, m in pairs( self.operations.FILL_GROUP ) do
+        if self:get_mode( m ) == operation.RUN then
+            self:check_fill_with_volume( m )
+        end
+        self:sync_temperature_par( m )
+    end
+end
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+--Пользовательская функция инициализации, выполняемая однократно в PAC.
+
+function user_init()
+    prg.master1:delay_init()
+    rpar = G_PARAMS_RECIPE_MANAGER()     -- Менеджер рецептов.
+    rec1 = rpar:createRecipes( 50, 100 ) -- Создаём хранилище рецептов - 50 рецептов по 100 параметров.
+    rmap1 = rpar:createAdapter( rec1 )   -- Создаём адаптер для хранилища рецептов.
+    rmap1:addMap( 41, 41, 45 )           -- Будем копировать 45 параметров рецепта, начиная с 41, в параметров объекта, начиная с 41.
+
+    safety:init( prg.master1 )
+    safety:add_rly( { MCC1DI2, 'MCC1' }, { CAB1DI2, 'CAB1' },
+                    { CAB2DI2, 'CAB2' }, { CAB3DI2, 'CAB3' },
+                    { CAB4DI2, 'CAB4' }, { CAB4DI2, 'CAB4' },
+                    { CAB5DI2, 'CAB5' }, { CAB6DI2, 'CAB6' },
+                    { CAB7DI2, 'CAB7' }, { CAB8DI2, 'CAB8' } )
+
+    safety:add_btn( { MCC1SB1, 'MCC1SB1' }, { CAB1SB1, 'CAB1SB1' },
+                    { CAB2SB1, 'CAB2SB1' }, { CAB3SB1, 'CAB3SB1' },
+                    { CAB4SB1, 'CAB4SB1' }, { CAB5SB1, 'CAB5SB1' },
+                    { CAB6SB1, 'CAB6SB1' }, { CAB7SB1, 'CAB7SB1' },
+                    { CAB8SB1, 'CAB8SB1' } )
+
+    _G[ 'M18FQT1' ] = virtual_FQT( 'M18FQT1' )
+    _G[ 'PM2FQT1' ] = virtual_FQT( 'PM2FQT1' )
+    _G[ 'RC3FQT1' ] = virtual_FQT( 'RC3FQT1' )
+
+    if G_PAC_INFO():is_emulator() then
+        for i = 1, 8 do
+            --prg.master1:set_cmd( "CMD", 0, 1000 + i )
+            _G[ "__TANK"..i.."LS2" ]:set_cmd( "St", 0, 0 ) --Датчик ВУ.
+            _G[ "__TANK"..i.."GS1" ]:set_cmd( "St", 0, 1 ) --Датчик люка.
+        end
+        _G[ "__CW_TANK1LS2" ]:set_cmd( "St", 0, 0 ) --Датчик ВУ.
+
+        for i = 1, 2 do
+            _G[ "__ALMIX"..i.."GS1" ]:set_cmd( "St", 0, 1 ) --Датчик Люка.
+            _G[ "__ALMIX"..i.."PT1" ]:set_cmd( "V", 0, 1 ) --Давление в Almix.
+        end
+        _G[ "__TANK1LS1" ]:set_cmd( "St", 0, 1 ) --Датчик НУ.
+        _G[ "__TANK1LT1" ]:set_cmd( "V", 0, 30 )
+
+        _G[ "__BOTTLERY1WATCHDOG1" ]:set_cmd( "M", 0, 1 )
+        _G[ "__MCA4WATCHDOG1" ]:set_cmd( "M", 0, 1 )
+        _G[ "__T_N1WATCHDOG1" ]:set_cmd( "M", 0, 1 )
+        _G[ "__T_PM1WATCHDOG1" ]:set_cmd( "M", 0, 1 )
+        _G[ "__T_RC1WATCHDOG1" ]:set_cmd( "M", 0, 1 )
+    else
+        prg.master1.first_call = true
+    end
+end
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+--Пользовательская функция, выполняемая каждый цикл в PAC.
+
+function user_eval()
+    rpar:evaluate()
+    safety:evaluate()
+
+    if prg.master1.first_call then
+        for l = 3, 4 do
+            for i = 1, 8 do
+                _G[ "__R2"..l.."V"..i ]:set_cmd( "M", 0, 1 )
+                _G[ "__R2"..l.."V"..i ]:set_cmd( "P_FB", 0, 0 )
+            end
+            _G[ "__R2"..l.."V101" ]:set_cmd( "M", 0, 1 )
+            _G[ "__R2"..l.."V101" ]:set_cmd( "P_FB", 0, 0 )
+        end
+        prg.master1.first_call = false
+    end
+end
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+--Функция инициализации параметров, выполняемая однократно в PAC.
+
+function user_init_params()
+end
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------

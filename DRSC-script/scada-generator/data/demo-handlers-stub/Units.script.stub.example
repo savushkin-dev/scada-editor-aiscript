@@ -1,0 +1,26 @@
+// Заготовка для разработки генератора (вымышленный юнит DEMO_LINE1_DI001).
+// Формат блока соответствует эталонному Units.script проекта «Моцарелла».
+//--------------- Begin: DEMO_LINE1_DI001 ---------------;
+function extern OnChangeM(Self);
+if (self.allocate = 'C')
+   if (self.m = 1)
+      self.setframes(3,0);
+   else
+      self.setframes(0);
+   end;
+end;
+endf;
+function extern OnChangeST(Self);
+if (self.allocate='C')
+  if (self.ST=0)
+    Self.SelFrame(1);
+  end;
+  if (self.ST=1)
+    Self.SelFrame(2);
+  end;
+end;
+endf;
+function extern OnClickReflDemo001(Self,SelfR);
+prj.OSClick(self);endf;
+
+//--------------- End: DEMO_LINE1_DI001 ---------------;
