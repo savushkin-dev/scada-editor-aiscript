@@ -2,7 +2,6 @@ package ru.drm.scada.cli;
 
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
-import ru.drm.scada.generator.UnitsScriptFormat;
 import ru.drm.scada.usecase.ProjectRunOptions;
 import ru.drm.scada.usecase.ScadaProjectService;
 
@@ -39,12 +38,6 @@ public class UpdateCommand implements Runnable {
     @Option(names = {"--tag-overrides"}, description = "Path to lua-tag-overrides.yaml.")
     private Path tagOverrides;
 
-    @Option(names = {"--script-format"}, defaultValue = "flat", description = "Units.script format: flat | blocks.")
-    private String scriptFormat;
-
-    @Option(names = {"--on-change"}, description = "Include OnChange templates (blocks format, demo stub).")
-    private boolean onChange;
-
     @Option(names = {"--maps-stub"}, description = "Create Maps.xml stub if missing.")
     private boolean mapsStub;
 
@@ -59,9 +52,7 @@ public class UpdateCommand implements Runnable {
     }
 
     private ProjectRunOptions runOptions() {
-        UnitsScriptFormat format = "blocks".equalsIgnoreCase(scriptFormat)
-                ? UnitsScriptFormat.BLOCKS : UnitsScriptFormat.FLAT;
-        return new ProjectRunOptions(tagOverrides, format, onChange, mapsStub);
+        return new ProjectRunOptions(tagOverrides, mapsStub);
     }
 }
 

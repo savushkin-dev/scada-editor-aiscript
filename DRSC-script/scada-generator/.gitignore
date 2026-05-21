@@ -23,6 +23,13 @@ out-*/
 demo-output/
 generated-projects/
 
+# Baseline-артефакты (генерируются scripts/run-baseline.ps1)
+docs/baseline/out-bn1/
+docs/baseline/meta/
+docs/baseline/*.log
+docs/baseline/tag-prefixes-stats.csv
+docs/baseline/BASELINE_SUMMARY.md
+
 # Логи и временные файлы
 *.log
 *.tmp

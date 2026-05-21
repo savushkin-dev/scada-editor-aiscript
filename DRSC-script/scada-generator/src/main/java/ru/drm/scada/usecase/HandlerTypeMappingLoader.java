@@ -19,13 +19,6 @@ public final class HandlerTypeMappingLoader {
     private HandlerTypeMappingLoader() {
     }
 
-    public static List<HandlerTypeMapping> load(Path yamlPath) throws IOException {
-        if (yamlPath == null || !Files.exists(yamlPath)) {
-            return List.of();
-        }
-        return HandlerTypeMapping.fromConfig(readConfig(yamlPath));
-    }
-
     public static HandlerMappingRegistry loadRegistry(Path yamlPath) throws IOException {
         return loadRegistry(yamlPath, null);
     }

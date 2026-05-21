@@ -53,7 +53,7 @@ cd C:\DRM\scada-generator
 - `update` — инкрементальное обновление существующего проекта
 - `watch` — наблюдение за каталогом Lua и автоматический `update`
 
-Дополнительно: [`GENERATE_USAGE.md`](GENERATE_USAGE.md), [`AI_LUA_USAGE.md`](AI_LUA_USAGE.md), [`DEMO_GUIDE.md`](DEMO_GUIDE.md), [`XML_CONTENT_EXPLAINED.md`](XML_CONTENT_EXPLAINED.md).
+Дополнительно: [`AI_LUA_USAGE.md`](AI_LUA_USAGE.md), [`LINUX_DEPLOYMENT_GUIDE.md`](LINUX_DEPLOYMENT_GUIDE.md).
 
 ## Команда generate
 
@@ -128,7 +128,7 @@ cd C:\DRM\scada-generator
   - откройте класс `ru.drm.scada.cli.ScadaGeneratorCli`
   - нажмите **Run**
   - аргументы задаются в **Run/Debug Configurations → Program arguments**:
-    - пример: `generate --pdf C:\...\spec.pdf --lua C:\...\logic.lua --output C:\...\out`
+    - пример: `generate -l data\BN1_Rastvorenie\BN1_Rastvorenie\docs -o out-demo -s data\BN1_Rastvorenie_scripts\scripts.txt`
 
 ## Частые проблемы
 

@@ -15,14 +15,14 @@
 ```powershell
 $env:OPENAI_API_KEY = "sk-..."   # один раз в сессии или в переменных среды
 
-java -jar scada-generator.jar generate -l "data/Моцарелла" -o output --ai
-java -jar scada-generator.jar update -l "data/Моцарелла" -e project -m meta --ai
+java -jar scada-generator.jar generate -l "data/BN1_Rastvorenie/BN1_Rastvorenie/docs" -o output --ai
+java -jar scada-generator.jar update -l "data/BN1_Rastvorenie/BN1_Rastvorenie/docs" -e project -m meta --ai
 ```
 
 ### Без ИИ (по умолчанию)
 
 ```powershell
-java -jar scada-generator.jar generate -l "data/Моцарелла" -o output
+java -jar scada-generator.jar generate -l "data/BN1_Rastvorenie/BN1_Rastvorenie/docs" -o output
 ```
 
 Без флага `--ai` используются только результаты regex-парсера.

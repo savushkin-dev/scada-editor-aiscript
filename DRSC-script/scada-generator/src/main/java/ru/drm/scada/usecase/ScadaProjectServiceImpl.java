@@ -121,8 +121,6 @@ public class ScadaProjectServiceImpl implements ScadaProjectService {
                             handlersCatalogSource,
                             typeMappingSource,
                             opts.tagOverridesSource(),
-                            opts.scriptFormat(),
-                            opts.includeOnChange(),
                             opts.generateMapsStub()));
         } else {
             deltaUpdater.update(model, existingProjectDir, metadataStore);

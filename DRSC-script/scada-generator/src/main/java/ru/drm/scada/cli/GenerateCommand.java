@@ -2,7 +2,6 @@ package ru.drm.scada.cli;
 
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
-import ru.drm.scada.generator.UnitsScriptFormat;
 import ru.drm.scada.usecase.ProjectRunOptions;
 import ru.drm.scada.usecase.ScadaProjectService;
 
@@ -39,7 +38,7 @@ public class GenerateCommand implements Runnable {
     @Override
     public void run() {
         ScadaProjectService service = ServiceFactory.createScadaProjectService();
-        ProjectRunOptions opts = new ProjectRunOptions(null, UnitsScriptFormat.FLAT, false, mapsStub);
+        ProjectRunOptions opts = new ProjectRunOptions(null, mapsStub);
         service.generateFromSources(luaPath, outputDir, useAi, unitsScriptPath, handlersSource, typeMapping, opts);
         System.out.println("SCADA project generated at: " + outputDir.toAbsolutePath());
     }
