@@ -53,7 +53,7 @@ cd C:\DRM\scada-generator
 - `update` — инкрементальное обновление существующего проекта
 - `watch` — наблюдение за каталогом Lua и автоматический `update`
 
-Документы для руководителя: [`docs/PRESENTATION.md`](docs/PRESENTATION.md) (сценарий демо), [`docs/ДЛЯ_РУКОВОДИТЕЛЯ.md`](docs/ДЛЯ_РУКОВОДИТЕЛЯ.md) (статус и запросы).
+Дополнительно: [`GENERATE_USAGE.md`](GENERATE_USAGE.md), [`AI_LUA_USAGE.md`](AI_LUA_USAGE.md), [`DEMO_GUIDE.md`](DEMO_GUIDE.md), [`XML_CONTENT_EXPLAINED.md`](XML_CONTENT_EXPLAINED.md).
 
 ## Команда generate
 
